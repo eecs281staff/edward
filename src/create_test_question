@@ -1,4 +1,4 @@
-#!/Users/caldak/classes/281/eecs281staff/edstem-api-testing/env/bin/python3
+#!/usr/bin/env python3
 
 import dotenv
 
