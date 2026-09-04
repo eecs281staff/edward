@@ -1,0 +1,6 @@
+.local.env
+env
+__pycache__
+edstem/__pycache__
+*.log
+questions.db

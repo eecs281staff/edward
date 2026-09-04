@@ -1,0 +1,29 @@
+#!/Users/caldak/classes/281/eecs281staff/edstem-api-testing/env/bin/python3
+
+import dotenv
+
+from edstem.client import Client
+from edstem.models import NewThread
+
+ENV_FILE = ".local.env"
+
+EDSTEM_API_KEY = dotenv.dotenv_values(ENV_FILE)["EDSTEM_API_KEY"] or ""
+EDSTEM_COURSE_ID = int(dotenv.dotenv_values(ENV_FILE)["COURSE_ID"] or 0)
+
+ed_client = Client(EDSTEM_API_KEY, authentication="bearer")
+
+result = ed_client.create_thread(
+    EDSTEM_COURSE_ID,
+    NewThread(
+        title="test",
+        category="General",
+        content='<document version="2.0"><paragraph>test</paragraph></document>',
+        type="question",
+    ),
+)
+
+if result.is_err():
+    raise Exception(f"Failed to create question: {result.error}")
+
+thread = result.unwrap().thread
+print(thread.id, thread.number, thread.title)
