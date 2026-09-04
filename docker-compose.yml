@@ -1,0 +1,6 @@
+services:
+  edward:
+    build: .
+    restart: unless-stopped
+    volumes:
+      - ./.local.env:/app/.local.env:ro

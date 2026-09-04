@@ -34,9 +34,13 @@ Use a local environment and install `requirements.txt`
 
 Make sure you have set up `.local.env`. You can see an example with `ex.local.env`
 
-Running the bot:
+Running the bot directly on your system:
 
 `python3 src/main.py`
+
+Alternatively, using Docker Compose:
+
+`docker compose up --build`
 
 You can create a question using `src/create_test_question`
 
