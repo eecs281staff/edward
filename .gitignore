@@ -1,4 +1,4 @@
-.local.env
+.local.env*
 env
 __pycache__
 edstem/__pycache__
