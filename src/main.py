@@ -16,6 +16,7 @@ from slack_app import (
     get_user_id_by_uniqname,
     load_user_ids,
 )
+from version import __version__
 
 NEW_THREAD_TYPE = "thread.new"
 
@@ -33,6 +34,17 @@ MAX_RECONNECT_DELAY = 60.0
 
 # how many of the newest threads to look at when catching up on startup
 BACKFILL_THREAD_LIMIT = 50
+
+STATUS_COMMAND = "/edward-status"
+
+# health state, written by the stream thread and read by the slack thread
+_started_at = time.monotonic()
+
+# None until the first frame arrives, so a bot that connected but never heard
+# anything does not look healthy
+_last_frame_at: float | None = None
+
+_reconnect_count = 0
 
 @app.action(ASK_FOR_HELP_ACTION_ID)
 def handle_ask_for_help(ack, body) -> None:
@@ -73,9 +85,41 @@ def handle_ask_for_help(ack, body) -> None:
 
 
 
+def format_duration(seconds: float) -> str:
+    """Render a span as its two largest useful units, e.g. "3h 12m"."""
+    hours, remainder = divmod(int(seconds), 3600)
+
+    minutes, secs = divmod(remainder, 60)
+
+    if hours:
+        return f"{hours}h {minutes}m"
+
+    if minutes:
+        return f"{minutes}m {secs}s"
+
+    return f"{secs}s"
+
+
+@app.command(STATUS_COMMAND)
+def handle_status(ack, respond) -> None:
+    ack()
+
+    if _last_frame_at is None:
+        last_frame = "no Edstem frames yet"
+    else:
+        last_frame = (
+            f"last Edstem frame {format_duration(time.monotonic() - _last_frame_at)} ago"
+        )
+
+    respond(
+        f"Edward v{__version__} | up {format_duration(time.monotonic() - _started_at)}"
+        f" | {last_frame} | {_reconnect_count} stream reconnects"
+    )
 
 
 def assign_staff_to_new_questions() -> None:
+    global _last_frame_at, _reconnect_count
+
     store.init_db()
     QuestionAssigner.initialize()
 
@@ -119,6 +163,8 @@ def assign_staff_to_new_questions() -> None:
                 LOG.warning("reconnect failed")
                 continue
 
+            _reconnect_count += 1
+
             stream.subscribe_course(EDSTEM_COURSE_ID)
 
             # the stream does not replay what it sent while we were away, so pick
@@ -128,6 +174,8 @@ def assign_staff_to_new_questions() -> None:
             continue
 
         backoff = INITIAL_RECONNECT_DELAY
+
+        _last_frame_at = time.monotonic()
 
         response = recv.unwrap()
 

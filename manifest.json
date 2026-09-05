@@ -11,11 +11,24 @@
     "bot_user": {
       "display_name": "Edward",
       "always_online": true
-    }
+    },
+    "slash_commands": [
+      {
+        "command": "/edward-status",
+        "description": "Show whether Edward is alive and connected to Edstem",
+        "should_escape": false
+      }
+    ]
   },
   "oauth_config": {
     "scopes": {
-      "bot": ["chat:write","users:read","users:read.email","reactions:write", "commands"]
+      "bot": [
+        "chat:write",
+        "users:read",
+        "users:read.email",
+        "reactions:write",
+        "commands"
+      ]
     }
   },
   "settings": {
