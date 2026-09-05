@@ -14,7 +14,8 @@ BACKFILL_THREAD_LIMIT = 50
 # feature flag enabled/disabled for easier testing
 # if on, will skip all posts and questions created by admins,
 # making testing a bit harder
-SKIP_STAFF_POSTS = False
+# SKIP_STAFF_POSTS also prevents staff from "gaming" the system
+SKIP_STAFF_POSTS = True
 
 class QuestionAssigner:
     # list of Edstem staff IDs
