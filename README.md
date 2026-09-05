@@ -51,6 +51,8 @@ SLACK_APP_TOKEN
 SLACK_BOT_TOKEN
 SLACK_CHANNEL_ID
 Follow the instructions [here](https://docs.slack.dev/tools/bolt-python/getting-started/)
-on how to get the first two. For the channel ID, right click on the channel you want
+on how to get the first two. NOTE: You'll need admin permissions to add Edward to your workspace.
+For the channel ID, right click on the channel you want
 Edward to send messages in, Channel Details > View Channel Details, and you can copy
 the Channel ID at the bottom. Make sure you add Edward to that channel!
+
