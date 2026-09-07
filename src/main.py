@@ -131,8 +131,6 @@ def assign_staff_to_new_questions() -> None:
     if res.is_err():
         raise ValueError(f"Failed to connect to stream: {res.error}")
 
-    # print(f"analytics: {ed_client.get_course_analytics_discussion(EDSTEM_COURSE_ID).unwrap()}")
-
     stream.subscribe_course(int(EDSTEM_COURSE_ID))
 
 
@@ -180,8 +178,6 @@ def assign_staff_to_new_questions() -> None:
         _last_frame_at = time.monotonic()
 
         response = recv.unwrap()
-
-        print(f"response: {response}")
 
         if response.type == NEW_THREAD_TYPE:
             QuestionAssigner.handle_new_thread(response)
