@@ -21,7 +21,7 @@ BACKFILL_THREAD_LIMIT = 50
 # if on, will skip all posts and questions created by admins,
 # making testing a bit harder
 # SKIP_STAFF_POSTS also prevents staff from "gaming" the system
-SKIP_STAFF_POSTS = False
+SKIP_STAFF_POSTS = True
 
 class QuestionAssigner:
     # map from Edstem user id to uniqname
