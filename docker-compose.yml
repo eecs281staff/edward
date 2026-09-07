@@ -4,3 +4,4 @@ services:
     restart: unless-stopped
     volumes:
       - ./.local.env:/app/.local.env:ro
+      - ./questions.db:/app/questions.db
