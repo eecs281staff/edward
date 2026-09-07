@@ -42,7 +42,14 @@ Alternatively, using Docker Compose:
 
 `docker compose up --build`
 
+NOTE: You must create `questions.db` first before starting the Docker container,
+otherwise Docker will create a directory called `questions.db`, causing sqlite to fail.
+
+## Testing
+
 You can create a question using `src/create_test_question`
+
+You can test other endpoints using a similar outline as the previously-mentioned file.
 
 ## Slack Setup
 
