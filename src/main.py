@@ -22,6 +22,8 @@ NEW_THREAD_TYPE = "thread.new"
 
 THREAD_UPDATE_TYPE = "thread.update"
 
+NEW_COMMENT_TYPE = "comment.new"
+
 
 ASK_FOR_HELP_ACTION_ID = "ask_for_help"
 
@@ -179,10 +181,14 @@ def assign_staff_to_new_questions() -> None:
 
         response = recv.unwrap()
 
+        print(f"response: {response}")
+
         if response.type == NEW_THREAD_TYPE:
             QuestionAssigner.handle_new_thread(response)
         elif response.type == THREAD_UPDATE_TYPE:
             QuestionAssigner.handle_thread_update(response)
+        elif response.type == NEW_COMMENT_TYPE:
+            QuestionAssigner.handle_new_comment(response)
         else:
             LOG.info(f"skipping received response of type {response.type}")
             continue

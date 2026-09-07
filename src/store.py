@@ -1,7 +1,9 @@
 import sqlite3
 import threading
 
-DB_FILE = "../questions.db"
+from common import LOG
+
+DB_FILE = "questions.db"
 
 UNANSWERED = "unanswered"
 ANSWERED = "answered"
@@ -25,10 +27,19 @@ def init_db() -> None:
                 message_text TEXT NOT NULL,
                 dri TEXT NOT NULL,
                 status TEXT NOT NULL,
-                accepted_id INTEGER
+                accepted_id INTEGER,
+                staff_answerer TEXT
             )
             """
         )
+
+        # databases created before this column existed still need it
+        columns = {row["name"] for row in _connection.execute("PRAGMA table_info(questions)")}
+
+        if "staff_answerer" not in columns:
+            LOG.info("Adding column staff_answerer to table questions")
+            _connection.execute("ALTER TABLE questions ADD COLUMN staff_answerer TEXT")
+
         _connection.commit()
 
 
@@ -71,6 +82,19 @@ def set_status(thread_id: int, status: str) -> None:
     with _lock:
         _connection.execute(
             "UPDATE questions SET status = ? WHERE thread_id = ?", (status, thread_id)
+        )
+        _connection.commit()
+
+
+def set_staff_answerer(thread_id: int, uniqname: str) -> None:
+    """Record the first staff answer."""
+    with _lock:
+        _connection.execute(
+            """
+            UPDATE questions SET staff_answerer = ?
+            WHERE thread_id = ? AND staff_answerer IS NULL
+            """,
+            (uniqname, thread_id),
         )
         _connection.commit()
 

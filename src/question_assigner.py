@@ -6,7 +6,13 @@ from csvparser import DayOfWeek, Parser
 from edstem.models import decode
 from edstem.stream import StreamServerMessage, StreamThreadNew
 from edstem_client import EDSTEM_COURSE_ID, ed_client
-from slack_app import app, build_help_button_block, mention_user_by_uniqname, post_question
+from slack_app import (
+    UMICH_EMAIL_DOMAIN,
+    app,
+    build_help_button_block,
+    mention_user_by_uniqname,
+    post_question,
+)
 
 STAFF_CSV_FILE = "staff.csv"
 BACKFILL_THREAD_LIMIT = 50
@@ -15,17 +21,17 @@ BACKFILL_THREAD_LIMIT = 50
 # if on, will skip all posts and questions created by admins,
 # making testing a bit harder
 # SKIP_STAFF_POSTS also prevents staff from "gaming" the system
-SKIP_STAFF_POSTS = True
+SKIP_STAFF_POSTS = False
 
 class QuestionAssigner:
-    # list of Edstem staff IDs
-    staff_ids: list[int] = [] #= staff_ids
+    # map from Edstem user id to uniqname
+    staff_uniqnames_by_id: dict[int, str] = {}
 
     # map from day of week to staff uniqnames responsible for that day
-    day_to_responsible_staff_uniqnames: dict[DayOfWeek, list[str]] = {}#= day_to_responsible_staff_uniqnames
+    day_to_responsible_staff_uniqnames: dict[DayOfWeek, list[str]] = {}
 
     # set of staff uniqnames
-    all_staff_uniqnames: set = set() #= {staff for sublist in day_to_responsible_staff_uniqnames.values() for staff in sublist}
+    all_staff_uniqnames: set = set()
 
     # permutation of all_staff_uniqnames that extra help pulls from
     # ensures repeats happens only after all staff have been pinged
@@ -34,7 +40,13 @@ class QuestionAssigner:
     # initialize static vars, idk how to do this in python better
     @staticmethod
     def initialize() -> None:
-        QuestionAssigner.staff_ids.extend([user.user_id for user in ed_client.get_course_users(EDSTEM_COURSE_ID).unwrap() if user.course_role != "student"])
+        QuestionAssigner.staff_uniqnames_by_id.update(
+            {
+                user.user_id: user.email.removesuffix(UMICH_EMAIL_DOMAIN)
+                for user in ed_client.get_course_users(EDSTEM_COURSE_ID).unwrap()
+                if user.course_role != "student"
+            }
+        )
         QuestionAssigner.day_to_responsible_staff_uniqnames.update(Parser().parse_csv(STAFF_CSV_FILE))
         QuestionAssigner.all_staff_uniqnames.update(staff for sublist in QuestionAssigner.day_to_responsible_staff_uniqnames.values() for staff in sublist)
 
@@ -167,7 +179,7 @@ class QuestionAssigner:
             if thread.type == "announcement":
                 continue
 
-            if thread.user_id in QuestionAssigner.staff_ids and SKIP_STAFF_POSTS:
+            if thread.user_id in QuestionAssigner.staff_uniqnames_by_id and SKIP_STAFF_POSTS:
                 continue
 
             # someone answers quickly
@@ -202,7 +214,7 @@ class QuestionAssigner:
             LOG.info(f"skipping post id {event_thread.id} because it is an announcement")
             return
 
-        if event_thread.user_id in QuestionAssigner.staff_ids and SKIP_STAFF_POSTS:
+        if event_thread.user_id in QuestionAssigner.staff_uniqnames_by_id and SKIP_STAFF_POSTS:
             LOG.info(f"skipping post id {event_thread.id} because it was posted by a staff/admin\n")
             return
 
@@ -291,5 +303,34 @@ class QuestionAssigner:
         store.set_accepted_id(thread_id, accepted_id)
 
 
+    @staticmethod
+    def handle_new_comment(response: StreamServerMessage) -> None:
+        """Record who gave the first staff answer on a question we track."""
+        comment = response.data.get("comment", {})
 
+        thread_id = comment.get("thread_id")
 
+        if thread_id is None:
+            return
+
+        question = store.get_question(thread_id)
+
+        if question is None:
+            LOG.info(f"skipping comment on untracked thread id {thread_id}")
+            return
+
+        if comment.get("type") != "answer":
+            return
+
+        uniqname = QuestionAssigner.staff_uniqnames_by_id.get(comment.get("user_id"))
+
+        if uniqname is None:
+            return
+
+        # only the first staff answer is kept
+        if question["staff_answerer"] is not None:
+            return
+
+        store.set_staff_answerer(thread_id, uniqname)
+
+        LOG.info(f"thread {thread_id} was answered by {uniqname}")
