@@ -1,6 +1,7 @@
 from typing import cast
 
 from slack_bolt import App
+from slack_sdk.errors import SlackApiError
 from slack_sdk.http_retry import RateLimitErrorRetryHandler
 
 import store
@@ -85,6 +86,29 @@ def build_help_button_block(thread_id: int, dri: str) -> dict:
             }
         ],
     }
+
+def add_reaction(channel_id: str, message_ts: str, name: str) -> None:
+    try:
+        app.client.reactions_add(channel=channel_id, timestamp=message_ts, name=name)
+    except SlackApiError as error:
+        # this is not an exceptional case
+        # can happen when there's 2 staff answers, and the "accepted" answer changes,
+        # edward tries to re-apply the check reaction
+        if error.response.get("error") != "already_reacted":
+            raise
+
+        LOG.info(f"reaction {name} was already on message {message_ts}")
+
+
+def remove_reaction(channel_id: str, message_ts: str, name: str) -> None:
+    try:
+        app.client.reactions_remove(channel=channel_id, timestamp=message_ts, name=name)
+    except SlackApiError as error:
+        if error.response.get("error") != "no_reaction":
+            raise
+
+        LOG.info(f"reaction {name} was not on message {message_ts}")
+
 
 def post_question(thread: StreamThread | ThreadSummary, dri: str) -> None:
     """Announce a thread in slack and record it so updates can find it later."""

@@ -8,10 +8,12 @@ from edstem.stream import StreamServerMessage, StreamThreadNew
 from edstem_client import EDSTEM_COURSE_ID, ed_client
 from slack_app import (
     UMICH_EMAIL_DOMAIN,
+    add_reaction,
     app,
     build_help_button_block,
     mention_user_by_uniqname,
     post_question,
+    remove_reaction,
 )
 
 STAFF_CSV_FILE = "staff.csv"
@@ -256,11 +258,7 @@ class QuestionAssigner:
         if accepted_id is not None:
             store.set_status(thread_id, store.ANSWERED)
 
-            app.client.reactions_add(
-                channel=channel_id,
-                timestamp=message_ts,
-                name="white_check_mark",
-            )
+            add_reaction(channel_id, message_ts, "white_check_mark")
 
             app.client.chat_update(
                 channel=channel_id,
@@ -276,11 +274,7 @@ class QuestionAssigner:
         else:
             store.set_status(thread_id, store.ANSWER_NOT_ACCEPTED)
 
-            app.client.reactions_remove(
-                channel=channel_id,
-                timestamp=message_ts,
-                name="white_check_mark",
-            )
+            remove_reaction(channel_id, message_ts, "white_check_mark")
 
             dri = question["dri"]
 
