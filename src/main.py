@@ -1,3 +1,5 @@
+import argparse
+import json
 import random
 import threading
 import time
@@ -12,7 +14,10 @@ from edstem_client import EDSTEM_AUTH_TOKEN, EDSTEM_COURSE_ID
 from env import get_env_variable
 from question_assigner import QuestionAssigner
 from slack_app import (
+    ASK_FOR_HELP_CONFIRM_CALLBACK_ID,
     app,
+    build_help_confirm_modal,
+    get_uniqname_by_user_id,
     get_user_id_by_uniqname,
     load_user_ids,
 )
@@ -61,10 +66,21 @@ def handle_ask_for_help(ack, body) -> None:
     user_id = body["user"]["id"]
 
     if user_id != get_user_id_by_uniqname(dri):
-        app.client.chat_postEphemeral(
-            channel=body["channel"]["id"],
-            user=user_id,
-            text="Only the assignee for this question can request help.",
+        app.client.views_open(
+            trigger_id=body["trigger_id"],
+            view=build_help_confirm_modal(
+                dri,
+                json.dumps(
+                    {
+                        "thread_id": thread_id,
+                        "dri": dri,
+                        "channel_id": body["channel"]["id"],
+                        "button_ts": body["message"]["ts"],
+                        "button_blocks": body["message"]["blocks"],
+                        "button_text": body["message"].get("text", ""),
+                    }
+                ),
+            ),
         )
         return
 
@@ -83,6 +99,40 @@ def handle_ask_for_help(ack, body) -> None:
         button_blocks=body["message"]["blocks"],
         button_text=body["message"].get("text", ""),
         context_text=f"Help requested by <@{user_id}>",
+        requester=dri,
+    )
+
+
+@app.view(ASK_FOR_HELP_CONFIRM_CALLBACK_ID)
+def handle_ask_for_help_confirm(ack, body, view) -> None:
+    ack()
+
+    request = json.loads(view["private_metadata"])
+
+    thread_id = request["thread_id"]
+
+    user_id = body["user"]["id"]
+
+    question = store.get_question(thread_id)
+
+    if question is None:
+        LOG.warning(f"no stored question for thread id {thread_id}")
+        return
+
+    if question["status"] == store.HELP_REQUESTED:
+        LOG.info(f"help was already requested for thread id {thread_id}")
+        return
+
+    QuestionAssigner.request_extra_help(
+        thread_id=thread_id,
+        dri=request["dri"],
+        channel_id=request["channel_id"],
+        parent_ts=question["message_ts"],
+        button_ts=request["button_ts"],
+        button_blocks=request["button_blocks"],
+        button_text=request["button_text"],
+        context_text=f"Help requested by <@{user_id}>",
+        requester=get_uniqname_by_user_id(user_id),
     )
 
 
@@ -191,7 +241,23 @@ def assign_staff_to_new_questions() -> None:
 
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Edward, the helpful Edstem bot")
+
+    parser.add_argument(
+        "--include-staff-posts",
+        action="store_true",
+        help="assign posts and questions created by staff, which are skipped by default",
+    )
+
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
+    args = parse_args()
+
+    QuestionAssigner.skip_staff_posts = not args.include_staff_posts
+
     load_user_ids()
 
     question_assigner = threading.Thread(target=assign_staff_to_new_questions)

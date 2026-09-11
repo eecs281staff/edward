@@ -17,6 +17,7 @@ app.client.retry_handlers.append(RateLimitErrorRetryHandler(max_retry_count=3))
 SLACK_CHANNEL_ID = get_env_variable('SLACK_CHANNEL_ID')
 
 ASK_FOR_HELP_ACTION_ID = 'ask_for_help'
+ASK_FOR_HELP_CONFIRM_CALLBACK_ID = 'confirm_ask_for_help'
 UMICH_EMAIL_DOMAIN = "@umich.edu"
 
 # uniqname -> slack user id, populated at startup to prevent rate limiting
@@ -55,6 +56,24 @@ def get_user_id_by_uniqname(uniqname: str) -> str:
 
     return USER_IDS[uniqname]
 
+def get_uniqname_by_user_id(user_id: str) -> str | None:
+    """Reverse of get_user_id_by_uniqname."""
+    for uniqname, cached_id in USER_IDS.items():
+        if cached_id == user_id:
+            return uniqname
+
+    # a miss means they joined the workspace after startup
+    email = app.client.users_info(user=user_id)["user"].get("profile", {}).get("email") or ""
+
+    if not email.endswith(UMICH_EMAIL_DOMAIN):
+        return None
+
+    uniqname = email[: -len(UMICH_EMAIL_DOMAIN)]
+
+    USER_IDS[uniqname] = user_id
+
+    return uniqname
+
 def build_post_url(course_id: int, question_id: int, question_number: int) -> str:
     return f"<https://edstem.org/us/courses/{course_id}/discussion/{question_id}|{question_number}>"
 
@@ -83,6 +102,29 @@ def build_help_button_block(thread_id: int, dri: str) -> dict:
                 # the thread id travels with the button so the handler still knows
                 # which question it is when the button sits on a threaded reply
                 "value": f"{thread_id}:{dri}",
+            }
+        ],
+    }
+
+def build_help_confirm_modal(dri: str, private_metadata: str) -> dict:
+    """Confirmation shown when someone who is not the assignee presses the button."""
+    return {
+        "type": "modal",
+        "callback_id": ASK_FOR_HELP_CONFIRM_CALLBACK_ID,
+        "title": {"type": "plain_text", "text": "Ask for extra help"},
+        "submit": {"type": "plain_text", "text": "Request help"},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "private_metadata": private_metadata,
+        "blocks": [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"This question is assigned to {mention_user_by_uniqname(dri)}, not you."
+                        " Request extra help for it anyway?"
+                    ),
+                },
             }
         ],
     }

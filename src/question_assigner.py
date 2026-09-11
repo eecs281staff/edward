@@ -19,13 +19,13 @@ from slack_app import (
 STAFF_CSV_FILE = "staff.csv"
 BACKFILL_THREAD_LIMIT = 50
 
-# feature flag enabled/disabled for easier testing
-# if on, will skip all posts and questions created by admins,
-# making testing a bit harder
-# SKIP_STAFF_POSTS also prevents staff from "gaming" the system
-SKIP_STAFF_POSTS = True
-
 class QuestionAssigner:
+    # if on, will skip all posts and questions created by admins,
+    # making testing a bit harder
+    # also prevents staff from "gaming" the system
+    # turned off with the --include-staff-posts flag for easier testing
+    skip_staff_posts: bool = True
+
     # map from Edstem user id to uniqname
     staff_uniqnames_by_id: dict[int, str] = {}
 
@@ -74,19 +74,26 @@ class QuestionAssigner:
         button_blocks: list[dict],
         button_text: str,
         context_text: str,
+        requester: str | None = None,
     ) -> None:
         """Pull in extra staff for a question and retire its help button.
 
         ``parent_ts`` is the original question message (where the reply goes);
         ``button_ts`` is whichever message the button was actually on, which is a
         threaded reply when help is requested after an answer was un-accepted.
+
+        ``requester`` is the uniqname of whoever pressed the button, which is not
+        the assignee when a non-assignee confirmed the request.
         """
         current_day = get_current_day()
 
-        helpers = [staff for staff in QuestionAssigner.day_to_responsible_staff_uniqnames.get(current_day, []) if staff != dri]
+        # neither the assignee nor whoever asked can be their own extra help
+        excluded = {dri} if requester is None else {dri, requester}
+
+        helpers = [staff for staff in QuestionAssigner.day_to_responsible_staff_uniqnames.get(current_day, []) if staff not in excluded]
 
         if len(helpers) < 3:
-            helpers += QuestionAssigner.take_random_helpers(3 - len(helpers), set(helpers) | {dri})
+            helpers += QuestionAssigner.take_random_helpers(3 - len(helpers), set(helpers) | excluded)
 
         if not helpers:
             # LOG.warning("no staff available to ask for help")
@@ -181,7 +188,7 @@ class QuestionAssigner:
             if thread.type == "announcement":
                 continue
 
-            if thread.user_id in QuestionAssigner.staff_uniqnames_by_id and SKIP_STAFF_POSTS:
+            if thread.user_id in QuestionAssigner.staff_uniqnames_by_id and QuestionAssigner.skip_staff_posts:
                 continue
 
             # someone answers quickly
@@ -216,7 +223,7 @@ class QuestionAssigner:
             LOG.info(f"skipping post id {event_thread.id} because it is an announcement")
             return
 
-        if event_thread.user_id in QuestionAssigner.staff_uniqnames_by_id and SKIP_STAFF_POSTS:
+        if event_thread.user_id in QuestionAssigner.staff_uniqnames_by_id and QuestionAssigner.skip_staff_posts:
             LOG.info(f"skipping post id {event_thread.id} because it was posted by a staff/admin\n")
             return
 
