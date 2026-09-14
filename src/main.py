@@ -29,6 +29,8 @@ THREAD_UPDATE_TYPE = "thread.update"
 
 NEW_COMMENT_TYPE = "comment.new"
 
+THREAD_DELETE_TYPE = "thread.delete"
+
 
 ASK_FOR_HELP_ACTION_ID = "ask_for_help"
 
@@ -235,6 +237,8 @@ def assign_staff_to_new_questions() -> None:
             QuestionAssigner.handle_thread_update(response)
         elif response.type == NEW_COMMENT_TYPE:
             QuestionAssigner.handle_new_comment(response)
+        elif response.type == THREAD_DELETE_TYPE:
+            QuestionAssigner.handle_thread_delete(response)
         else:
             LOG.info(f"skipping received response of type {response.type}")
             continue

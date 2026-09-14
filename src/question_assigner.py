@@ -305,6 +305,34 @@ class QuestionAssigner:
 
 
     @staticmethod
+    def handle_thread_delete(response: StreamServerMessage) -> None:
+        """Mark the slack message of a deleted Edstem thread."""
+        thread_id = response.data.get("thread_id")
+
+        if thread_id is None:
+            return
+
+        question = store.get_question(thread_id)
+
+        if question is None:
+            LOG.info(f"skipping delete for untracked thread id {thread_id}")
+            return
+
+        add_reaction(question["channel_id"], question["message_ts"], "wastebasket")
+
+        app.client.chat_update(
+            channel=question["channel_id"],
+            ts=question["message_ts"],
+            text=question["message_text"],
+            blocks=[
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": question["message_text"]},
+                }
+            ],
+        )
+
+    @staticmethod
     def handle_new_comment(response: StreamServerMessage) -> None:
         """Record who gave the first staff answer on a question we track."""
         comment = response.data.get("comment", {})
