@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from edstem.client import Client
+from edstem.client import Client, request_token
 from edstem.models import (
     AuthenticationMode,
     Comment,
@@ -58,4 +58,5 @@ __all__ = [
     "ThreadSummary",
     "ThreadType",
     "UserReference",
+    "request_token",
 ]

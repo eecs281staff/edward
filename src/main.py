@@ -8,9 +8,10 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 
 import store
 from common import LOG
-from edstem.models import ParseError
+from edstem.client import request_token
+from edstem.models import Error, ParseError, Result
 from edstem.stream import Stream
-from edstem_client import EDSTEM_AUTH_TOKEN, EDSTEM_COURSE_ID
+from edstem_client import EDSTEM_COURSE_ID, EDSTEM_EMAIL, EDSTEM_PASSWORD
 from env import get_env_variable
 from question_assigner import QuestionAssigner
 from slack_app import (
@@ -20,6 +21,7 @@ from slack_app import (
     get_uniqname_by_user_id,
     get_user_id_by_uniqname,
     load_user_ids,
+    post_channel_message,
 )
 from version import __version__
 
@@ -41,6 +43,11 @@ INITIAL_RECONNECT_DELAY = 1.0
 # seconds
 MAX_RECONNECT_DELAY = 60.0
 
+# prevent rate limiting
+MIN_TOKEN_REFRESH_INTERVAL = 60.0
+
+STREAM_DOWN_ALERT_AFTER = 300.0
+
 # how many of the newest threads to look at when catching up on startup
 BACKFILL_THREAD_LIMIT = 50
 
@@ -54,6 +61,9 @@ _started_at = time.monotonic()
 _last_frame_at: float | None = None
 
 _reconnect_count = 0
+
+# when the last login to edstem was attempted
+_last_token_refresh_at: float | None = None
 
 @app.action(ASK_FOR_HELP_ACTION_ID)
 def handle_ask_for_help(ack, body) -> None:
@@ -171,13 +181,62 @@ def handle_status(ack, respond) -> None:
     )
 
 
+def log_in() -> Result[str, Error]:
+    """
+    Get a fresh edstem session token.
+    """
+    global _last_token_refresh_at
+
+    _last_token_refresh_at = time.monotonic()
+
+    return request_token(EDSTEM_EMAIL, EDSTEM_PASSWORD)
+
+
+def refresh_auth_token(stream: Stream) -> None:
+    """
+    Log in to edstem again and hand the stream the new token.
+    """
+    if (
+        _last_token_refresh_at is not None
+        and time.monotonic() - _last_token_refresh_at < MIN_TOKEN_REFRESH_INTERVAL
+    ):
+        return
+
+    result = log_in()
+
+    if result.is_err():
+        LOG.warning(f"failed to log in to edstem: {result.unwrap_err()}")
+        return
+
+    stream.token = result.unwrap()
+
+    LOG.info("refreshed edstem auth token")
+
+
+def report_stream_down(down_for: float) -> None:
+    """Tell the channel that edward is cut off from edstem."""
+    try:
+        post_channel_message(
+            f"Edward failed to reconnect to Ed after {format_duration(down_for)}."
+            " New Edstem questions are not being assigned."
+        )
+    except Exception as exception:
+        # slack is likely unreachable for the same reason edstem is, and losing
+        # the alert must not kill the stream thread
+        LOG.warning(f"could not post the stream down alert: {exception}")
+
+
 def assign_staff_to_new_questions() -> None:
     global _last_frame_at, _reconnect_count
 
     store.init_db()
     QuestionAssigner.initialize()
 
-    stream: Stream = Stream(EDSTEM_AUTH_TOKEN)
+    token = log_in()
+    if token.is_err():
+        raise ValueError(f"Failed to log in to edstem: {token.unwrap_err()}")
+
+    stream: Stream = Stream(token.unwrap())
 
     res = stream.connect()
     if res.is_err():
@@ -192,6 +251,12 @@ def assign_staff_to_new_questions() -> None:
 
     backoff = INITIAL_RECONNECT_DELAY
 
+    # when the stream first went down, None while it is up
+    down_since: float | None = None
+
+    # so the channel is only told once per outage
+    reported_down = False
+
     while True:
         recv = stream.receive()
 
@@ -203,6 +268,9 @@ def assign_staff_to_new_questions() -> None:
                 LOG.warning(f"skipping unparseable frame: {error}")
                 continue
 
+            if down_since is None:
+                down_since = time.monotonic()
+
             LOG.warning(f"stream dropped ({error}), reconnecting in {backoff:.1f}s")
 
             time.sleep(backoff + random.uniform(0, 1))
@@ -211,11 +279,26 @@ def assign_staff_to_new_questions() -> None:
 
             stream.close()
 
+            refresh_auth_token(stream)
+
             if stream.connect().is_err():
                 LOG.warning("reconnect failed")
+
+                if (
+                    not reported_down
+                    and time.monotonic() - down_since >= STREAM_DOWN_ALERT_AFTER
+                ):
+                    report_stream_down(time.monotonic() - down_since)
+
+                    reported_down = True
+
                 continue
 
             _reconnect_count += 1
+
+            down_since = None
+
+            reported_down = False
 
             stream.subscribe_course(EDSTEM_COURSE_ID)
 

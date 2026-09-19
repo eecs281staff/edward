@@ -152,6 +152,11 @@ def remove_reaction(channel_id: str, message_ts: str, name: str) -> None:
         LOG.info(f"reaction {name} was not on message {message_ts}")
 
 
+def post_channel_message(text: str) -> None:
+    """Post a plain message to the channel."""
+    app.client.chat_postMessage(channel=SLACK_CHANNEL_ID, text=text)
+
+
 def post_question(thread: StreamThread | ThreadSummary, dri: str) -> None:
     """Announce a thread in slack and record it so updates can find it later."""
     message = build_new_post_message(EDSTEM_COURSE_ID, thread, dri)

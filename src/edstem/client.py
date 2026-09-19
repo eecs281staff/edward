@@ -28,6 +28,66 @@ from edstem.models import (
 T = TypeVar("T")
 
 
+def request_token(
+    email: str,
+    password: str,
+    *,
+    base_url: str = "https://us.edstem.org/api",
+    timeout: float = 30.0,
+) -> Result[str, Error]:
+    """Exchange an account email and password for a session token.
+
+    Parameters
+    ----------
+    email : str
+    password : str
+    base_url : str, optional
+    timeout : float, optional
+
+    Returns
+    -------
+    Result[str, Error]
+    """
+    request = Request(
+        f"{base_url.rstrip('/')}/token",
+        data=json.dumps({"login": email, "password": password}).encode(),
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Origin": "https://edstem.org",
+            "User-Agent": "edstem-python/1.0",
+        },
+        method="POST",
+    )
+
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            status = getattr(response, "status", 200)
+            body_bytes = response.read()
+    except UrllibHTTPError as exception:
+        body_bytes = exception.read() if exception.fp is not None else b""
+        return Result.Err(HttpError(exception.code, body_bytes.decode("utf-8", errors="replace")))
+    except URLError as exception:
+        return Result.Err(NetworkError(str(exception.reason)))
+    except TimeoutError as exception:
+        return Result.Err(NetworkError(str(exception)))
+
+    text = body_bytes.decode("utf-8", errors="replace")
+
+    if status != 200:
+        return Result.Err(HttpError(status, text))
+
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exception:
+        return Result.Err(ParseError(str(exception), body=text))
+
+    if type(payload) is not dict or type(payload.get("token")) is not str:
+        return Result.Err(ParseError("missing 'token' field", body=text))
+
+    return Result.Ok(payload["token"])
+
+
 class Client:
     """Unofficial EdStem HTTP API client.
 
