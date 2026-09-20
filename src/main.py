@@ -6,6 +6,7 @@ import time
 
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
+import canary
 import store
 from common import LOG
 from edstem.client import request_token
@@ -21,9 +22,7 @@ from slack_app import (
     get_uniqname_by_user_id,
     get_user_id_by_uniqname,
     load_user_ids,
-    post_channel_message,
 )
-from version import __version__
 
 NEW_THREAD_TYPE = "thread.new"
 
@@ -46,21 +45,10 @@ MAX_RECONNECT_DELAY = 60.0
 # prevent rate limiting
 MIN_TOKEN_REFRESH_INTERVAL = 60.0
 
-STREAM_DOWN_ALERT_AFTER = 300.0
-
 # how many of the newest threads to look at when catching up on startup
 BACKFILL_THREAD_LIMIT = 50
 
 STATUS_COMMAND = "/edward-status"
-
-# health state, written by the stream thread and read by the slack thread
-_started_at = time.monotonic()
-
-# None until the first frame arrives, so a bot that connected but never heard
-# anything does not look healthy
-_last_frame_at: float | None = None
-
-_reconnect_count = 0
 
 # when the last login to edstem was attempted
 _last_token_refresh_at: float | None = None
@@ -149,36 +137,11 @@ def handle_ask_for_help_confirm(ack, body, view) -> None:
 
 
 
-def format_duration(seconds: float) -> str:
-    """Render a span as its two largest useful units, e.g. "3h 12m"."""
-    hours, remainder = divmod(int(seconds), 3600)
-
-    minutes, secs = divmod(remainder, 60)
-
-    if hours:
-        return f"{hours}h {minutes}m"
-
-    if minutes:
-        return f"{minutes}m {secs}s"
-
-    return f"{secs}s"
-
-
 @app.command(STATUS_COMMAND)
 def handle_status(ack, respond) -> None:
     ack()
 
-    if _last_frame_at is None:
-        last_frame = "no Edstem frames yet"
-    else:
-        last_frame = (
-            f"last Edstem frame {format_duration(time.monotonic() - _last_frame_at)} ago"
-        )
-
-    respond(
-        f"Edward v{__version__} | up {format_duration(time.monotonic() - _started_at)}"
-        f" | {last_frame} | {_reconnect_count} stream reconnects"
-    )
+    respond(canary.status_line())
 
 
 def log_in() -> Result[str, Error]:
@@ -213,22 +176,7 @@ def refresh_auth_token(stream: Stream) -> None:
     LOG.info("refreshed edstem auth token")
 
 
-def report_stream_down(down_for: float) -> None:
-    """Tell the channel that edward is cut off from edstem."""
-    try:
-        post_channel_message(
-            f"Edward failed to reconnect to Ed after {format_duration(down_for)}."
-            " New Edstem questions are not being assigned."
-        )
-    except Exception as exception:
-        # slack is likely unreachable for the same reason edstem is, and losing
-        # the alert must not kill the stream thread
-        LOG.warning(f"could not post the stream down alert: {exception}")
-
-
 def assign_staff_to_new_questions() -> None:
-    global _last_frame_at, _reconnect_count
-
     store.init_db()
     QuestionAssigner.initialize()
 
@@ -251,12 +199,6 @@ def assign_staff_to_new_questions() -> None:
 
     backoff = INITIAL_RECONNECT_DELAY
 
-    # when the stream first went down, None while it is up
-    down_since: float | None = None
-
-    # so the channel is only told once per outage
-    reported_down = False
-
     while True:
         recv = stream.receive()
 
@@ -268,8 +210,7 @@ def assign_staff_to_new_questions() -> None:
                 LOG.warning(f"skipping unparseable frame: {error}")
                 continue
 
-            if down_since is None:
-                down_since = time.monotonic()
+            canary.note_stream_down()
 
             LOG.warning(f"stream dropped ({error}), reconnecting in {backoff:.1f}s")
 
@@ -284,21 +225,11 @@ def assign_staff_to_new_questions() -> None:
             if stream.connect().is_err():
                 LOG.warning("reconnect failed")
 
-                if (
-                    not reported_down
-                    and time.monotonic() - down_since >= STREAM_DOWN_ALERT_AFTER
-                ):
-                    report_stream_down(time.monotonic() - down_since)
-
-                    reported_down = True
-
                 continue
 
-            _reconnect_count += 1
+            canary.note_reconnect()
 
-            down_since = None
-
-            reported_down = False
+            canary.note_stream_up()
 
             stream.subscribe_course(EDSTEM_COURSE_ID)
 
@@ -310,7 +241,7 @@ def assign_staff_to_new_questions() -> None:
 
         backoff = INITIAL_RECONNECT_DELAY
 
-        _last_frame_at = time.monotonic()
+        canary.note_frame()
 
         response = recv.unwrap()
 
@@ -349,4 +280,7 @@ if __name__ == "__main__":
 
     question_assigner = threading.Thread(target=assign_staff_to_new_questions)
     question_assigner.start()
+
+    canary.start(question_assigner)
+
     SocketModeHandler(app, get_env_variable("SLACK_APP_TOKEN")).start()
