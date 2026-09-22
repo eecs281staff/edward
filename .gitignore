@@ -4,3 +4,4 @@ __pycache__
 edstem/__pycache__
 *.log
 questions.db
+.DS_Store
