@@ -45,9 +45,6 @@ MAX_RECONNECT_DELAY = 60.0
 # prevent rate limiting
 MIN_TOKEN_REFRESH_INTERVAL = 60.0
 
-# how many of the newest threads to look at when catching up on startup
-BACKFILL_THREAD_LIMIT = 50
-
 STATUS_COMMAND = "/edward-status"
 
 # when the last login to edstem was attempted

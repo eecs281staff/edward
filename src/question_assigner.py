@@ -4,7 +4,7 @@ from datetime import datetime
 import store
 from common import LOG, TIMEZONE, get_current_day
 from csvparser import DayOfWeek, Parser
-from edstem.models import decode
+from edstem.models import ThreadSummary, decode
 from edstem.stream import StreamServerMessage, StreamThreadNew
 from edstem_client import EDSTEM_COURSE_ID, ed_client
 from slack_app import (
@@ -18,7 +18,9 @@ from slack_app import (
 )
 
 STAFF_CSV_FILE = "staff.csv"
-BACKFILL_THREAD_LIMIT = 50
+
+# max is always 100, it paginates on >100
+THREAD_PAGE_SIZE = 100
 
 class QuestionAssigner:
     # if on, will skip all posts and questions created by admins,
@@ -158,6 +160,32 @@ class QuestionAssigner:
         return picked
 
     @staticmethod
+    def list_all_course_threads() -> list[ThreadSummary]:
+        threads: list[ThreadSummary] = []
+
+        offset = 0
+
+        while True:
+            result = ed_client.list_course_threads(
+                EDSTEM_COURSE_ID, limit=THREAD_PAGE_SIZE, offset=offset, sort="new"
+            )
+
+            if result.is_err():
+                LOG.warning(
+                    f"could not list threads at offset {offset}: {result.unwrap_err()}"
+                )
+                return threads
+
+            page = result.unwrap().threads
+
+            if not page:
+                return threads
+
+            threads += page
+
+            offset += len(page)
+
+    @staticmethod
     def backfill_missed_questions() -> None:
         """Post questions that came in while the bot was not listening.
 
@@ -169,17 +197,13 @@ class QuestionAssigner:
             LOG.info("nothing stored yet, so there is nothing to catch up on")
             return
 
-        result = ed_client.list_course_threads(
-            EDSTEM_COURSE_ID, limit=BACKFILL_THREAD_LIMIT, sort="new"
-        )
-
-        if result.is_err():
-            LOG.warning(f"skipping catch up, could not list threads: {result.unwrap_err()}")
-            return
-
         # oldest first, so the slack messages and the dri rotation stay in order
         missed = sorted(
-            (thread for thread in result.unwrap().threads if thread.number > last_number),
+            (
+                thread
+                for thread in QuestionAssigner.list_all_course_threads()
+                if thread.number > last_number
+            ),
             key=lambda thread: thread.number,
         )
 
@@ -222,19 +246,9 @@ class QuestionAssigner:
         if not missing:
             return
 
-        result = ed_client.list_course_threads(
-            EDSTEM_COURSE_ID, limit=BACKFILL_THREAD_LIMIT, sort="new"
-        )
-
-        if result.is_err():
-            LOG.warning(
-                f"skipping answer backfill, could not list threads: {result.unwrap_err()}"
-            )
-            return
-
         candidates = [
             thread.id
-            for thread in result.unwrap().threads
+            for thread in QuestionAssigner.list_all_course_threads()
             if thread.is_answered and thread.id in missing
         ]
 
