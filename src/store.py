@@ -1,7 +1,8 @@
 import sqlite3
 import threading
+from datetime import datetime
 
-from common import LOG
+from common import LOG, TIMEZONE
 
 DB_FILE = "questions.db"
 
@@ -13,6 +14,10 @@ ANSWER_NOT_ACCEPTED = "answer_not_accepted"
 _lock = threading.Lock()
 _connection = sqlite3.connect(DB_FILE, check_same_thread=False)
 _connection.row_factory = sqlite3.Row
+
+
+def _now() -> str:
+    return datetime.now(TIMEZONE).isoformat()
 
 
 def init_db() -> None:
@@ -28,17 +33,20 @@ def init_db() -> None:
                 dri TEXT NOT NULL,
                 status TEXT NOT NULL,
                 accepted_id INTEGER,
-                staff_answerer TEXT
+                staff_answerer TEXT,
+                assigned_at TEXT,
+                answered_at TEXT
             )
             """
         )
 
-        # databases created before this column existed still need it
+        # databases created before these columns existed still need them
         columns = {row["name"] for row in _connection.execute("PRAGMA table_info(questions)")}
 
-        if "staff_answerer" not in columns:
-            LOG.info("Adding column staff_answerer to table questions")
-            _connection.execute("ALTER TABLE questions ADD COLUMN staff_answerer TEXT")
+        for column in ("staff_answerer", "assigned_at", "answered_at"):
+            if column not in columns:
+                LOG.info(f"Adding column {column} to table questions")
+                _connection.execute(f"ALTER TABLE questions ADD COLUMN {column} TEXT")
 
         _connection.commit()
 
@@ -55,10 +63,11 @@ def add_question(
         _connection.execute(
             """
             INSERT OR REPLACE INTO questions
-                (thread_id, number, channel_id, message_ts, message_text, dri, status, accepted_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+                (thread_id, number, channel_id, message_ts, message_text, dri, status,
+                 accepted_id, assigned_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)
             """,
-            (thread_id, number, channel_id, message_ts, message_text, dri, UNANSWERED),
+            (thread_id, number, channel_id, message_ts, message_text, dri, UNANSWERED, _now()),
         )
         _connection.commit()
 
@@ -91,10 +100,10 @@ def set_staff_answerer(thread_id: int, uniqname: str) -> None:
     with _lock:
         _connection.execute(
             """
-            UPDATE questions SET staff_answerer = ?
+            UPDATE questions SET staff_answerer = ?, answered_at = ?
             WHERE thread_id = ? AND staff_answerer IS NULL
             """,
-            (uniqname, thread_id),
+            (uniqname, _now(), thread_id),
         )
         _connection.commit()
 
