@@ -50,6 +50,39 @@ def init_db() -> None:
 
         _connection.commit()
 
+    _backfill_assigned_at()
+
+
+def _backfill_assigned_at() -> None:
+    with _lock:
+        rows = _connection.execute(
+            "SELECT thread_id, message_ts FROM questions WHERE assigned_at IS NULL"
+        ).fetchall()
+
+        updates = []
+
+        for row in rows:
+            try:
+                posted_at = datetime.fromtimestamp(float(row["message_ts"]), TIMEZONE)
+            except ValueError:
+                LOG.warning(
+                    f"cannot backfill assigned_at for thread id {row['thread_id']}: "
+                    f"unreadable message_ts {row['message_ts']}"
+                )
+                continue
+
+            updates.append((posted_at.isoformat(), row["thread_id"]))
+
+        if not updates:
+            return
+
+        _connection.executemany(
+            "UPDATE questions SET assigned_at = ? WHERE thread_id = ?", updates
+        )
+        _connection.commit()
+
+        LOG.info(f"backfilled assigned_at for {len(updates)} questions")
+
 
 def add_question(
     thread_id: int,
