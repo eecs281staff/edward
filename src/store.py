@@ -141,6 +141,51 @@ def set_staff_answerer(thread_id: int, uniqname: str) -> None:
         _connection.commit()
 
 
+def get_thread_ids_missing_answer_info() -> list[int]:
+    """
+    Threads missing either the answer time or the acceptance.
+    """
+    with _lock:
+        cursor = _connection.execute(
+            "SELECT thread_id FROM questions WHERE answered_at IS NULL OR accepted_id IS NULL"
+        )
+        return [row["thread_id"] for row in cursor]
+
+
+def set_answer(
+    thread_id: int, uniqname: str, answered_at: str, accepted_id: int | None
+) -> bool:
+    """
+    Only empty fields are filled, so whatever was recorded live wins and a row
+    that is already complete is left alone.
+    """
+    changed = 0
+
+    with _lock:
+        changed += _connection.execute(
+            """
+            UPDATE questions
+            SET staff_answerer = COALESCE(staff_answerer, ?),
+                answered_at = COALESCE(answered_at, ?)
+            WHERE thread_id = ? AND (staff_answerer IS NULL OR answered_at IS NULL)
+            """,
+            (uniqname, answered_at, thread_id),
+        ).rowcount
+
+        if accepted_id is not None:
+            changed += _connection.execute(
+                """
+                UPDATE questions SET status = ?, accepted_id = ?
+                WHERE thread_id = ? AND (accepted_id IS NOT ? OR status != ?)
+                """,
+                (ANSWERED, accepted_id, thread_id, accepted_id, ANSWERED),
+            ).rowcount
+
+        _connection.commit()
+
+    return changed > 0
+
+
 def set_accepted_id(thread_id: int, accepted_id: int | None) -> None:
     with _lock:
         _connection.execute(

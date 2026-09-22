@@ -180,6 +180,8 @@ def assign_staff_to_new_questions() -> None:
     store.init_db()
     QuestionAssigner.initialize()
 
+    QuestionAssigner.backfill_answers()
+
     token = log_in()
     if token.is_err():
         raise ValueError(f"Failed to log in to edstem: {token.unwrap_err()}")

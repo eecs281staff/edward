@@ -1,7 +1,8 @@
 import random
+from datetime import datetime
 
 import store
-from common import LOG, get_current_day
+from common import LOG, TIMEZONE, get_current_day
 from csvparser import DayOfWeek, Parser
 from edstem.models import decode
 from edstem.stream import StreamServerMessage, StreamThreadNew
@@ -208,6 +209,84 @@ class QuestionAssigner:
             LOG.info(f"posting missed thread {thread.number}")
 
             post_question(thread, QuestionAssigner.take_next_dri())
+
+    @staticmethod
+    def backfill_answers() -> None:
+        """
+        Fills in the first staff answerer, the time of that answer, and the
+        acceptance. The answer time is not stored anywhere locally, so it comes
+        from the created_at of the earliest staff answer on the edstem thread.
+        """
+        missing = set(store.get_thread_ids_missing_answer_info())
+
+        if not missing:
+            return
+
+        result = ed_client.list_course_threads(
+            EDSTEM_COURSE_ID, limit=BACKFILL_THREAD_LIMIT, sort="new"
+        )
+
+        if result.is_err():
+            LOG.warning(
+                f"skipping answer backfill, could not list threads: {result.unwrap_err()}"
+            )
+            return
+
+        candidates = [
+            thread.id
+            for thread in result.unwrap().threads
+            if thread.is_answered and thread.id in missing
+        ]
+
+        if not candidates:
+            return
+
+        LOG.info(f"backfilling answers for {len(candidates)} thread(s)")
+
+        filled = 0
+
+        for thread_id in candidates:
+            detail = ed_client.get_thread(thread_id)
+
+            if detail.is_err():
+                LOG.warning(f"could not load thread {thread_id}: {detail.unwrap_err()}")
+                continue
+
+            thread = detail.unwrap().thread
+
+            staff_answers = []
+
+            for answer in thread.answers:
+                if answer.user_id not in QuestionAssigner.staff_uniqnames_by_id:
+                    continue
+
+                try:
+                    created_at = datetime.fromisoformat(answer.created_at)
+                except ValueError:
+                    LOG.warning(
+                        f"skipping answer {answer.id} on thread {thread_id}: "
+                        f"unreadable created_at {answer.created_at}"
+                    )
+                    continue
+
+                staff_answers.append((created_at, answer.user_id))
+
+            # is_answered is also true when only students answered
+            if not staff_answers:
+                LOG.info(f"no staff answer on thread {thread_id} to take a time from")
+                continue
+
+            answered_at, user_id = min(staff_answers)
+
+            if store.set_answer(
+                thread_id,
+                QuestionAssigner.staff_uniqnames_by_id[user_id],
+                answered_at.astimezone(TIMEZONE).isoformat(),
+                thread.accepted_id,
+            ):
+                filled += 1
+
+        LOG.info(f"backfilled answers for {filled} thread(s)")
 
     @staticmethod
     def handle_new_thread(response: StreamServerMessage) -> None:
