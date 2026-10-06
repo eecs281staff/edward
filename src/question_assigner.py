@@ -376,7 +376,8 @@ class QuestionAssigner:
 
             remove_reaction(channel_id, message_ts, "white_check_mark")
 
-            dri = question["dri"]
+            # staff_answerer is empty when no staff answered, e.g. a student's answer was accepted
+            dri = question["staff_answerer"] or question["dri"]
 
             reply = f"The accepted answer for this question was removed. {mention_user_by_uniqname(dri)}"
 
