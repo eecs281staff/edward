@@ -21,6 +21,9 @@ at least `3` other users, first prioritizing users that are also responsible for
 that day, then pinging other users (until the minimum 3 is reached) via random
 permutations.
 
+Because Edward pings on every question, let the staff know to have their notifications
+snoozed when they're sleeping.
+
 Edward also tracks the status of questions. When it receives an event which adds an
 "accepted" answer to a thread, it reacts to the message Edward sent with ✅. When a
 question loses an "accepted" answer, Edward removes the reaction, and pings the
