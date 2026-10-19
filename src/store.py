@@ -10,6 +10,7 @@ UNANSWERED = "unanswered"
 ANSWERED = "answered"
 HELP_REQUESTED = "help_requested"
 ANSWER_NOT_ACCEPTED = "answer_not_accepted"
+CONVERTED_TO_POST = "converted_to_post"
 
 _lock = threading.Lock()
 _connection = sqlite3.connect(DB_FILE, check_same_thread=False)

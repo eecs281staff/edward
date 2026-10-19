@@ -179,6 +179,8 @@ def assign_staff_to_new_questions() -> None:
 
     QuestionAssigner.backfill_answers()
 
+    QuestionAssigner.backfill_converted_posts()
+
     token = log_in()
     if token.is_err():
         raise ValueError(f"Failed to log in to edstem: {token.unwrap_err()}")

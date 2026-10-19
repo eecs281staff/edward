@@ -1,4 +1,5 @@
 import random
+import sqlite3
 from datetime import datetime
 
 import store
@@ -8,6 +9,7 @@ from edstem.models import ThreadSummary, decode
 from edstem.stream import StreamServerMessage, StreamThreadNew
 from edstem_client import EDSTEM_COURSE_ID, ed_client
 from slack_app import (
+    NEW_QUESTION_PREFIX,
     UMICH_EMAIL_DOMAIN,
     add_reaction,
     app,
@@ -303,6 +305,20 @@ class QuestionAssigner:
         LOG.info(f"backfilled answers for {filled} thread(s)")
 
     @staticmethod
+    def backfill_converted_posts() -> None:
+        """Mark questions that were turned into posts while the bot was not listening."""
+        for thread in QuestionAssigner.list_all_course_threads():
+            if thread.type != "post":
+                continue
+
+            question = store.get_question(thread.id)
+
+            if question is None:
+                continue
+
+            QuestionAssigner.mark_converted_to_post(question)
+
+    @staticmethod
     def handle_new_thread(response: StreamServerMessage) -> None:
         event: StreamThreadNew = decode(StreamThreadNew, response.data)
 
@@ -338,6 +354,12 @@ class QuestionAssigner:
 
         if question is None:
             LOG.info(f"skipping update for untracked thread id {thread_id}")
+            return
+
+        if thread.get("type") == "post":
+            QuestionAssigner.mark_converted_to_post(question)
+
+            # posts have no accepted answer, so there is nothing else to track
             return
 
         # view/reply counters come through as thread.update too, so only the frames
@@ -397,6 +419,34 @@ class QuestionAssigner:
 
         store.set_accepted_id(thread_id, accepted_id)
 
+
+    @staticmethod
+    def mark_converted_to_post(question: sqlite3.Row) -> None:
+        """Mark the slack message of a question that was turned into a post."""
+        # threads that started as posts are tracked too
+        if not question["message_text"].startswith(NEW_QUESTION_PREFIX):
+            return
+
+        if question["status"] == store.CONVERTED_TO_POST:
+            return
+
+        LOG.info(f"thread id {question['thread_id']} was turned into a post")
+
+        add_reaction(question["channel_id"], question["message_ts"], "memo")
+
+        app.client.chat_update(
+            channel=question["channel_id"],
+            ts=question["message_ts"],
+            text=question["message_text"],
+            blocks=[
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": question["message_text"]},
+                }
+            ],
+        )
+
+        store.set_status(question["thread_id"], store.CONVERTED_TO_POST)
 
     @staticmethod
     def handle_thread_delete(response: StreamServerMessage) -> None:

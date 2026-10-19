@@ -20,6 +20,9 @@ ASK_FOR_HELP_ACTION_ID = 'ask_for_help'
 ASK_FOR_HELP_CONFIRM_CALLBACK_ID = 'confirm_ask_for_help'
 UMICH_EMAIL_DOMAIN = "@umich.edu"
 
+NEW_POST_PREFIX = "New Edstem post:"
+NEW_QUESTION_PREFIX = "New Edstem question:"
+
 # uniqname -> slack user id, populated at startup to prevent rate limiting
 USER_IDS: dict[str, str] = {}
 
@@ -81,12 +84,12 @@ def build_post_url(course_id: int, question_id: int, question_number: int) -> st
 def build_new_post_message(course_id: int, event_thread: StreamThread | ThreadSummary, user: str) -> str:
     if event_thread.type == "post":
         return (
-        f"""New Edstem post: {build_post_url(course_id, event_thread.id, event_thread.number)}.
+        f"""{NEW_POST_PREFIX} {build_post_url(course_id, event_thread.id, event_thread.number)}.
 Note: if it is a post that should be a question, please turn the post into a question via Edit -> Question -> Save.
 Assignee: {mention_user_by_uniqname(user)}"""
         )
     return (
-    f"""New Edstem question: {build_post_url(course_id, event_thread.id, event_thread.number)}.
+    f"""{NEW_QUESTION_PREFIX} {build_post_url(course_id, event_thread.id, event_thread.number)}.
 Assignee: {mention_user_by_uniqname(user)}"""
     )
 
