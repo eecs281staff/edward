@@ -1,11 +1,12 @@
 import random
 import sqlite3
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 
 import store
-from common import LOG, TIMEZONE, get_current_day
+from common import LOG, TIMEZONE, format_duration, get_current_day
 from csvparser import DayOfWeek, Parser
-from edstem.models import ThreadSummary, decode
+from edstem.models import Thread, ThreadSummary, decode
 from edstem.stream import StreamServerMessage, StreamThreadNew
 from edstem_client import EDSTEM_COURSE_ID, ed_client
 from slack_app import (
@@ -30,6 +31,15 @@ class QuestionAssigner:
     # also prevents staff from "gaming" the system
     # turned off with the --include-staff-posts flag for easier testing
     skip_staff_posts: bool = True
+
+    # how long a question can go without a staff answer before help is asked for
+    auto_help_after: timedelta = timedelta(minutes=60)
+
+    # older questions are left alone, so a first deploy or a long outage does not
+    # ask for help on every old question at once
+    auto_help_max_age: timedelta = timedelta(hours=24)
+
+    auto_help_interval_seconds: float = 60.0
 
     # map from Edstem user id to uniqname
     staff_uniqnames_by_id: dict[int, str] = {}
@@ -270,39 +280,112 @@ class QuestionAssigner:
 
             thread = detail.unwrap().thread
 
-            staff_answers = []
-
-            for answer in thread.answers:
-                if answer.user_id not in QuestionAssigner.staff_uniqnames_by_id:
-                    continue
-
-                try:
-                    created_at = datetime.fromisoformat(answer.created_at)
-                except ValueError:
-                    LOG.warning(
-                        f"skipping answer {answer.id} on thread {thread_id}: "
-                        f"unreadable created_at {answer.created_at}"
-                    )
-                    continue
-
-                staff_answers.append((created_at, answer.user_id))
+            first_answer = QuestionAssigner.find_first_staff_answer(thread)
 
             # is_answered is also true when only students answered
-            if not staff_answers:
+            if first_answer is None:
                 LOG.info(f"no staff answer on thread {thread_id} to take a time from")
                 continue
 
-            answered_at, user_id = min(staff_answers)
-
-            if store.set_answer(
-                thread_id,
-                QuestionAssigner.staff_uniqnames_by_id[user_id],
-                answered_at.astimezone(TIMEZONE).isoformat(),
-                thread.accepted_id,
-            ):
+            if store.set_answer(thread_id, *first_answer, thread.accepted_id):
                 filled += 1
 
         LOG.info(f"backfilled answers for {filled} thread(s)")
+
+    @staticmethod
+    def find_first_staff_answer(thread: Thread) -> tuple[str, str] | None:
+        """The uniqname and time of the earliest staff answer on the edstem thread."""
+        staff_answers = []
+
+        for answer in thread.answers:
+            if answer.user_id not in QuestionAssigner.staff_uniqnames_by_id:
+                continue
+
+            try:
+                created_at = datetime.fromisoformat(answer.created_at)
+            except ValueError:
+                LOG.warning(
+                    f"skipping answer {answer.id} on thread {thread.id}: "
+                    f"unreadable created_at {answer.created_at}"
+                )
+                continue
+
+            staff_answers.append((created_at, answer.user_id))
+
+        if not staff_answers:
+            return None
+
+        answered_at, user_id = min(staff_answers)
+
+        return (
+            QuestionAssigner.staff_uniqnames_by_id[user_id],
+            answered_at.astimezone(TIMEZONE).isoformat(),
+        )
+
+    @staticmethod
+    def run_auto_help() -> None:
+        while True:
+            try:
+                QuestionAssigner.auto_request_help()
+            except Exception as exception:
+                LOG.warning(f"could not auto-ask for help: {exception}")
+
+            time.sleep(QuestionAssigner.auto_help_interval_seconds)
+
+    @staticmethod
+    def auto_request_help() -> None:
+        """Ask for extra help on questions that have gone too long without a staff answer."""
+        now = datetime.now(TIMEZONE)
+
+        for question in store.get_unanswered_questions():
+            if not question["message_text"].startswith(NEW_QUESTION_PREFIX):
+                continue
+
+            if question["assigned_at"] is None:
+                continue
+
+            age = now - datetime.fromisoformat(question["assigned_at"])
+
+            if not QuestionAssigner.auto_help_after <= age <= QuestionAssigner.auto_help_max_age:
+                continue
+
+            thread_id = question["thread_id"]
+
+            detail = ed_client.get_thread(thread_id)
+
+            if detail.is_err():
+                LOG.warning(f"could not load thread {thread_id}: {detail.unwrap_err()}")
+                continue
+
+            thread = detail.unwrap().thread
+
+            first_answer = QuestionAssigner.find_first_staff_answer(thread)
+
+            if first_answer is not None:
+                store.set_answer(thread_id, *first_answer, thread.accepted_id)
+                continue
+
+            LOG.info(f"auto-asking for help on thread {thread_id}")
+
+            QuestionAssigner.request_extra_help(
+                thread_id=thread_id,
+                dri=question["dri"],
+                channel_id=question["channel_id"],
+                parent_ts=question["message_ts"],
+                button_ts=question["message_ts"],
+                button_blocks=[
+                    {
+                        "type": "section",
+                        "text": {"type": "mrkdwn", "text": question["message_text"]},
+                    }
+                ],
+                button_text=question["message_text"],
+                context_text=(
+                    "Help automatically requested after "
+                    f"{format_duration(QuestionAssigner.auto_help_after.total_seconds())}"
+                    " without a staff answer"
+                ),
+            )
 
     @staticmethod
     def backfill_converted_posts() -> None:
@@ -461,6 +544,8 @@ class QuestionAssigner:
         if question is None:
             LOG.info(f"skipping delete for untracked thread id {thread_id}")
             return
+
+        store.set_status(thread_id, store.DELETED)
 
         add_reaction(question["channel_id"], question["message_ts"], "wastebasket")
 

@@ -21,13 +21,21 @@ at least `3` other users, first prioritizing users that are also responsible for
 that day, then pinging other users (until the minimum 3 is reached) via random
 permutations.
 
+If a question goes 60 minutes without a staff answer, Edward asks for extra help on
+it automatically, the same way the button does. Questions older than 24 hours are
+skipped. Both times, and how often Edward checks, are set with `--auto-help-after`,
+`--auto-help-max-age`, and `--auto-help-interval`.
+
 Because Edward pings on every question, let the staff know to have their notifications
-snoozed when they're sleeping.
+snoozed when they're sleeping/dont' want notifications.
 
 Edward also tracks the status of questions. When it receives an event which adds an
 "accepted" answer to a thread, it reacts to the message Edward sent with ✅. When a
 question loses an "accepted" answer, Edward removes the reaction, and pings the
-originally-responsible staff.
+responsible staff.
+
+It also handles posts that get deleted, and questions that were meant to be posts via other emoji
+reactions.
 
 ## Usage
 

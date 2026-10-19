@@ -11,6 +11,7 @@ ANSWERED = "answered"
 HELP_REQUESTED = "help_requested"
 ANSWER_NOT_ACCEPTED = "answer_not_accepted"
 CONVERTED_TO_POST = "converted_to_post"
+DELETED = "deleted"
 
 _lock = threading.Lock()
 _connection = sqlite3.connect(DB_FILE, check_same_thread=False)
@@ -119,6 +120,14 @@ def get_question(thread_id: int) -> sqlite3.Row | None:
             "SELECT * FROM questions WHERE thread_id = ?", (thread_id,)
         )
         return cursor.fetchone()
+
+
+def get_unanswered_questions() -> list[sqlite3.Row]:
+    with _lock:
+        return _connection.execute(
+            "SELECT * FROM questions WHERE status = ? AND staff_answerer IS NULL",
+            (UNANSWERED,),
+        ).fetchall()
 
 
 def set_status(thread_id: int, status: str) -> None:
