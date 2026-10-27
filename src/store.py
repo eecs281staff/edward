@@ -50,6 +50,15 @@ def init_db() -> None:
                 LOG.info(f"Adding column {column} to table questions")
                 _connection.execute(f"ALTER TABLE questions ADD COLUMN {column} TEXT")
 
+        _connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sent_announcements (
+                thread_id INTEGER PRIMARY KEY,
+                sent_at TEXT NOT NULL
+            )
+            """
+        )
+
         _connection.commit()
 
     _backfill_assigned_at()
@@ -200,5 +209,22 @@ def set_accepted_id(thread_id: int, accepted_id: int | None) -> None:
     with _lock:
         _connection.execute(
             "UPDATE questions SET accepted_id = ? WHERE thread_id = ?", (accepted_id, thread_id)
+        )
+        _connection.commit()
+
+
+def is_announcement_sent(thread_id: int) -> bool:
+    with _lock:
+        cursor = _connection.execute(
+            "SELECT 1 FROM sent_announcements WHERE thread_id = ?", (thread_id,)
+        )
+        return cursor.fetchone() is not None
+
+
+def add_sent_announcement(thread_id: int) -> None:
+    with _lock:
+        _connection.execute(
+            "INSERT OR IGNORE INTO sent_announcements (thread_id, sent_at) VALUES (?, ?)",
+            (thread_id, _now()),
         )
         _connection.commit()

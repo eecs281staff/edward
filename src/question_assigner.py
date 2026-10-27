@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import store
 from common import LOG, TIMEZONE, format_duration, get_current_day
 from csvparser import DayOfWeek, Parser
+from discord_webhook import post_announcement
 from edstem.models import Thread, ThreadSummary, decode
 from edstem.stream import StreamServerMessage, StreamThreadNew
 from edstem_client import EDSTEM_COURSE_ID, ed_client
@@ -223,6 +224,14 @@ class QuestionAssigner:
 
         for thread in missed:
             if thread.type == "announcement":
+                if not store.is_announcement_sent(thread.id):
+                    detail = ed_client.get_thread(thread.id)
+
+                    if detail.is_err():
+                        LOG.warning(f"could not load announcement {thread.id}: {detail.unwrap_err()}")
+                    else:
+                        post_announcement(detail.unwrap().thread)
+
                 continue
 
             if thread.user_id in QuestionAssigner.staff_uniqnames_by_id and QuestionAssigner.skip_staff_posts:
@@ -412,7 +421,7 @@ class QuestionAssigner:
             return
 
         if event_thread.type == "announcement":
-            LOG.info(f"skipping post id {event_thread.id} because it is an announcement")
+            post_announcement(event_thread)
             return
 
         if event_thread.user_id in QuestionAssigner.staff_uniqnames_by_id and QuestionAssigner.skip_staff_posts:

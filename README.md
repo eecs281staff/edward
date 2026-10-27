@@ -37,6 +37,8 @@ responsible staff.
 It also handles posts that get deleted, and questions that were meant to be posts via other emoji
 reactions.
 
+Edward forwards every Edstem announcement to the course Discord server.
+
 ## Usage
 
 Installation:
