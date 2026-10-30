@@ -20,7 +20,8 @@ class Parser:
 
                 columns[cast(DayOfWeek, day)] = index
         schedule: dict[DayOfWeek, list[str]] = {day: [] for day in columns}
-        for row in rows[2:]:
+        # skip first row which just has the days of the week
+        for row in rows[1:]:
             names = {
                 day: row[index].strip() if index < len(row) else ""
                 for day, index in columns.items()
