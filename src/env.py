@@ -9,3 +9,6 @@ def get_env_variable(key: str) -> str:
 
     return val
 
+
+def get_optional_env_variable(key: str) -> str | None:
+    return dotenv_values(ENV_FILE).get(key)

@@ -7,9 +7,12 @@ from common import LOG
 from edstem.models import Thread
 from edstem.stream import StreamThread
 from edstem_client import EDSTEM_COURSE_ID
-from env import get_env_variable
+from env import get_optional_env_variable
 
-DISCORD_WEBHOOK_URL = get_env_variable("DISCORD_WEBHOOK_URL")
+DISCORD_WEBHOOK_URL = get_optional_env_variable("DISCORD_WEBHOOK_URL")
+
+if DISCORD_WEBHOOK_URL is None:
+    LOG.info("DISCORD_WEBHOOK_URL not set, not forwarding announcements to Discord")
 
 # discord's limits on embed fields
 MAX_TITLE_LENGTH = 256
@@ -42,6 +45,9 @@ def build_announcement_payload(thread: StreamThread | Thread) -> dict:
 def post_announcement(thread: StreamThread | Thread) -> None:
     """Forward an edstem announcement to discord, once per thread."""
     assert thread.type == "announcement", f"thread {thread.id} is not an announcement"
+
+    if DISCORD_WEBHOOK_URL is None:
+        return
 
     if thread.is_private:
         LOG.info(f"not forwarding private announcement {thread.id} to discord")

@@ -37,7 +37,7 @@ responsible staff.
 It also handles posts that get deleted, and questions that were meant to be posts via other emoji
 reactions.
 
-Edward forwards every Edstem announcement to the course Discord server.
+If the relevant environment variable is set, Edward forwards every Edstem announcement to a Discord Webhook
 
 ## Usage
 

@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import store
 from common import LOG, TIMEZONE, format_duration, get_current_day
 from csvparser import DayOfWeek, Parser
-from discord_webhook import post_announcement
+from discord_webhook import DISCORD_WEBHOOK_URL, post_announcement
 from edstem.models import Thread, ThreadSummary, decode
 from edstem.stream import StreamServerMessage, StreamThreadNew
 from edstem_client import EDSTEM_COURSE_ID, ed_client
@@ -224,7 +224,7 @@ class QuestionAssigner:
 
         for thread in missed:
             if thread.type == "announcement":
-                if not store.is_announcement_sent(thread.id):
+                if DISCORD_WEBHOOK_URL is not None and not store.is_announcement_sent(thread.id):
                     detail = ed_client.get_thread(thread.id)
 
                     if detail.is_err():
