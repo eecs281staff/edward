@@ -21,6 +21,9 @@ at least `3` other users, first prioritizing users that are also responsible for
 that day, then pinging other users (until the minimum 3 is reached) via random
 permutations.
 
+There is also an `escalate to faculty` button, which pings the faculty for the course
+when pressed. The faculty list is configured in the .local.env file
+
 If a question goes 60 minutes without a staff answer, Edward asks for extra help on
 it automatically, the same way the button does. Questions older than 24 hours are
 skipped. Both times, and how often Edward checks, are set with `--auto-help-after`,
