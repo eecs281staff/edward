@@ -11,13 +11,19 @@ from edstem.models import Thread, ThreadSummary, decode
 from edstem.stream import StreamServerMessage, StreamThreadNew
 from edstem_client import EDSTEM_COURSE_ID, ed_client
 from slack_app import (
+    ASK_FOR_HELP_ACTION_ID,
+    ESCALATE_TO_FACULTY_ACTION_ID,
+    FACULTY_UNIQNAMES,
     NEW_QUESTION_PREFIX,
     UMICH_EMAIL_DOMAIN,
     add_reaction,
     app,
-    build_help_button_block,
+    build_context_block,
+    build_escalated_context_block,
+    build_question_buttons_block,
     mention_user_by_uniqname,
     post_question,
+    remove_button,
     remove_reaction,
 )
 
@@ -92,7 +98,7 @@ class QuestionAssigner:
         context_text: str,
         requester: str | None = None,
     ) -> None:
-        """Pull in extra staff for a question and retire its help button.
+        """Pull in extra staff for a question.
 
         ``parent_ts`` is the original question message (where the reply goes);
         ``button_ts`` is whichever message the button was actually on, which is a
@@ -127,13 +133,49 @@ class QuestionAssigner:
         store.set_status(thread_id, store.HELP_REQUESTED)
 
         # drop the button so help can only be requested once per message
-        blocks = [block for block in button_blocks if block["type"] != "actions"]
-        blocks.append(
-            {
-                "type": "context",
-                "elements": [{"type": "mrkdwn", "text": context_text}],
-            }
+        blocks = remove_button(button_blocks, ASK_FOR_HELP_ACTION_ID)
+        blocks.append(build_context_block(context_text))
+
+        app.client.chat_update(
+            channel=channel_id,
+            ts=button_ts,
+            text=button_text,
+            blocks=blocks,
         )
+
+
+    @staticmethod
+    def escalate_to_faculty(
+        thread_id: int,
+        channel_id: str,
+        parent_ts: str,
+        button_ts: str,
+        button_blocks: list[dict],
+        button_text: str,
+        user_id: str,
+    ) -> None:
+        """Ping every faculty member on a question.
+
+        ``parent_ts`` and ``button_ts`` work the same as in request_extra_help.
+        ``user_id`` is the slack user id of whoever pressed the button.
+        """
+        if not FACULTY_UNIQNAMES:
+            LOG.warning("no faculty to escalate to")
+            return
+
+        mentions = ", ".join(mention_user_by_uniqname(faculty) for faculty in FACULTY_UNIQNAMES)
+
+        app.client.chat_postMessage(
+            channel=channel_id,
+            thread_ts=parent_ts,
+            text=f"Escalating this question to faculty!\nFaculty: {mentions}",
+            unfurl_links=False,
+        )
+
+        store.set_escalated_by(thread_id, user_id)
+
+        blocks = remove_button(button_blocks, ESCALATE_TO_FACULTY_ACTION_ID)
+        blocks.append(build_escalated_context_block(user_id))
 
         app.client.chat_update(
             channel=channel_id,
@@ -145,7 +187,7 @@ class QuestionAssigner:
 
     @staticmethod
     def take_random_helpers(count: int, exclude: set[str]) -> list[str]:
-        """Deal ``count`` staff off the helper deck, skipping anybody in ``exclude``.
+        """Take ``count`` staff off the helper deck, skipping anybody in ``exclude``.
 
         Randomly selects a permutation of staff, doesn't give repeat staff until everyone
         is chosen
@@ -376,18 +418,26 @@ class QuestionAssigner:
 
             LOG.info(f"auto-asking for help on thread {thread_id}")
 
+            escalated = question["escalated_at"] is not None
+
+            button_blocks = [
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": question["message_text"]},
+                },
+                build_question_buttons_block(thread_id, question["dri"], faculty_button=not escalated),
+            ]
+
+            if escalated:
+                button_blocks.append(build_escalated_context_block(question["escalated_by"]))
+
             QuestionAssigner.request_extra_help(
                 thread_id=thread_id,
                 dri=question["dri"],
                 channel_id=question["channel_id"],
                 parent_ts=question["message_ts"],
                 button_ts=question["message_ts"],
-                button_blocks=[
-                    {
-                        "type": "section",
-                        "text": {"type": "mrkdwn", "text": question["message_text"]},
-                    }
-                ],
+                button_blocks=button_blocks,
                 button_text=question["message_text"],
                 context_text=(
                     "Help automatically requested after "
@@ -505,7 +555,9 @@ class QuestionAssigner:
                         "type": "section",
                         "text": {"type": "mrkdwn", "text": reply},
                     },
-                    build_help_button_block(thread_id, dri),
+                    build_question_buttons_block(
+                        thread_id, dri, faculty_button=question["escalated_at"] is None
+                    ),
                 ],
             )
 

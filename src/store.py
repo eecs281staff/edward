@@ -37,7 +37,9 @@ def init_db() -> None:
                 accepted_id INTEGER,
                 staff_answerer TEXT,
                 assigned_at TEXT,
-                answered_at TEXT
+                answered_at TEXT,
+                escalated_at TEXT,
+                escalated_by TEXT
             )
             """
         )
@@ -45,7 +47,7 @@ def init_db() -> None:
         # databases created before these columns existed still need them
         columns = {row["name"] for row in _connection.execute("PRAGMA table_info(questions)")}
 
-        for column in ("staff_answerer", "assigned_at", "answered_at"):
+        for column in ("staff_answerer", "assigned_at", "answered_at", "escalated_at", "escalated_by"):
             if column not in columns:
                 LOG.info(f"Adding column {column} to table questions")
                 _connection.execute(f"ALTER TABLE questions ADD COLUMN {column} TEXT")
@@ -203,6 +205,15 @@ def set_answer(
         _connection.commit()
 
     return changed > 0
+
+
+def set_escalated_by(thread_id: int, user_id: str) -> None:
+    with _lock:
+        _connection.execute(
+            "UPDATE questions SET escalated_at = ?, escalated_by = ? WHERE thread_id = ?",
+            (_now(), user_id, thread_id),
+        )
+        _connection.commit()
 
 
 def set_accepted_id(thread_id: int, accepted_id: int | None) -> None:

@@ -9,7 +9,7 @@ from common import LOG
 from edstem.models import ThreadSummary
 from edstem.stream import StreamThread
 from edstem_client import EDSTEM_COURSE_ID
-from env import get_env_variable
+from env import get_env_variable, get_optional_env_variable
 
 app = App(token=get_env_variable("SLACK_BOT_TOKEN"))
 app.client.retry_handlers.append(RateLimitErrorRetryHandler(max_retry_count=3))
@@ -18,7 +18,16 @@ SLACK_CHANNEL_ID = get_env_variable('SLACK_CHANNEL_ID')
 
 ASK_FOR_HELP_ACTION_ID = 'ask_for_help'
 ASK_FOR_HELP_CONFIRM_CALLBACK_ID = 'confirm_ask_for_help'
+ESCALATE_TO_FACULTY_ACTION_ID = 'escalate_to_faculty'
+ESCALATE_TO_FACULTY_CONFIRM_CALLBACK_ID = 'confirm_escalate_to_faculty'
 UMICH_EMAIL_DOMAIN = "@umich.edu"
+
+# the escalate button is hidden when this is empty
+FACULTY_UNIQNAMES: list[str] = [
+    uniqname.strip()
+    for uniqname in (get_optional_env_variable("FACULTY_UNIQNAMES") or "").split(",")
+    if uniqname.strip()
+]
 
 NEW_POST_PREFIX = "New Edstem post:"
 NEW_QUESTION_PREFIX = "New Edstem question:"
@@ -48,6 +57,14 @@ def load_user_ids() -> None:
             break
 
     LOG.info(f"cached {len(USER_IDS)} slack user ids")
+
+def check_faculty_user_ids() -> None:
+    """Check if all faculty uniqnames are in the Slack workspaces"""
+    for uniqname in FACULTY_UNIQNAMES:
+        try:
+            get_user_id_by_uniqname(uniqname)
+        except SlackApiError as error:
+            raise ValueError(f"faculty uniqname {uniqname} is not in the slack workspace") from error
 
 def get_user_id_by_uniqname(uniqname: str) -> str:
     # a miss means someone joined the workspace after startup, so look them up
@@ -94,20 +111,57 @@ Assignee: {mention_user_by_uniqname(user)}"""
     )
 
 
-def build_help_button_block(thread_id: int, dri: str) -> dict:
-    return {
-        "type": "actions",
-        "elements": [
+def build_question_buttons_block(thread_id: int, dri: str, faculty_button: bool = True) -> dict:
+    value = f"{thread_id}:{dri}"
+
+    elements = [
+        {
+            "type": "button",
+            "text": {"type": "plain_text", "text": "Ask for extra help"},
+            "action_id": ASK_FOR_HELP_ACTION_ID,
+            "value": value,
+        }
+    ]
+
+    if faculty_button and FACULTY_UNIQNAMES:
+        elements.append(
             {
                 "type": "button",
-                "text": {"type": "plain_text", "text": "Ask for extra help"},
-                "action_id": ASK_FOR_HELP_ACTION_ID,
-                # the thread id travels with the button so the handler still knows
-                # which question it is when the button sits on a threaded reply
-                "value": f"{thread_id}:{dri}",
+                "text": {"type": "plain_text", "text": "Escalate to faculty"},
+                "action_id": ESCALATE_TO_FACULTY_ACTION_ID,
+                "value": value,
             }
-        ],
+        )
+
+    return {"type": "actions", "elements": elements}
+
+
+def remove_button(blocks: list[dict], action_id: str) -> list[dict]:
+    kept = []
+
+    for block in blocks:
+        if block["type"] == "actions":
+            elements = [element for element in block["elements"] if element.get("action_id") != action_id]
+
+            if not elements:
+                continue
+
+            block = {**block, "elements": elements}
+
+        kept.append(block)
+
+    return kept
+
+
+def build_context_block(text: str) -> dict:
+    return {
+        "type": "context",
+        "elements": [{"type": "mrkdwn", "text": text}],
     }
+
+
+def build_escalated_context_block(user_id: str) -> dict:
+    return build_context_block(f"Escalated to faculty by <@{user_id}>")
 
 def build_help_confirm_modal(dri: str, private_metadata: str) -> dict:
     """Confirmation shown when someone who is not the assignee presses the button."""
@@ -126,6 +180,29 @@ def build_help_confirm_modal(dri: str, private_metadata: str) -> dict:
                     "text": (
                         f"This question is assigned to {mention_user_by_uniqname(dri)}, not you."
                         " Request extra help for it anyway?"
+                    ),
+                },
+            }
+        ],
+    }
+
+def build_faculty_confirm_modal(dri: str, private_metadata: str) -> dict:
+    """Confirmation shown when someone who is not the assignee presses the escalate button."""
+    return {
+        "type": "modal",
+        "callback_id": ESCALATE_TO_FACULTY_CONFIRM_CALLBACK_ID,
+        "title": {"type": "plain_text", "text": "Escalate to faculty"},
+        "submit": {"type": "plain_text", "text": "Escalate"},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "private_metadata": private_metadata,
+        "blocks": [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"This question is assigned to {mention_user_by_uniqname(dri)}, not you."
+                        " Escalate it to faculty anyway?"
                     ),
                 },
             }
@@ -173,7 +250,7 @@ def post_question(thread: StreamThread | ThreadSummary, dri: str) -> None:
                 "type": "section",
                 "text": {"type": "mrkdwn", "text": message},
             },
-            build_help_button_block(thread.id, dri),
+            build_question_buttons_block(thread.id, dri),
         ],
     )
 

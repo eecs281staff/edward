@@ -18,8 +18,12 @@ from env import get_env_variable
 from question_assigner import QuestionAssigner
 from slack_app import (
     ASK_FOR_HELP_CONFIRM_CALLBACK_ID,
+    ESCALATE_TO_FACULTY_ACTION_ID,
+    ESCALATE_TO_FACULTY_CONFIRM_CALLBACK_ID,
     app,
+    build_faculty_confirm_modal,
     build_help_confirm_modal,
+    check_faculty_user_ids,
     get_uniqname_by_user_id,
     get_user_id_by_uniqname,
     load_user_ids,
@@ -131,6 +135,84 @@ def handle_ask_for_help_confirm(ack, body, view) -> None:
         button_text=request["button_text"],
         context_text=f"Help requested by <@{user_id}>",
         requester=get_uniqname_by_user_id(user_id),
+    )
+
+
+@app.action(ESCALATE_TO_FACULTY_ACTION_ID)
+def handle_escalate_to_faculty(ack, body) -> None:
+    ack()
+
+    raw_thread_id, _, dri = body["actions"][0]["value"].partition(":")
+
+    thread_id = int(raw_thread_id)
+
+    user_id = body["user"]["id"]
+
+    if user_id != get_user_id_by_uniqname(dri):
+        app.client.views_open(
+            trigger_id=body["trigger_id"],
+            view=build_faculty_confirm_modal(
+                dri,
+                json.dumps(
+                    {
+                        "thread_id": thread_id,
+                        "channel_id": body["channel"]["id"],
+                        "button_ts": body["message"]["ts"],
+                        "button_blocks": body["message"]["blocks"],
+                        "button_text": body["message"].get("text", ""),
+                    }
+                ),
+            ),
+        )
+        return
+
+    question = store.get_question(thread_id)
+
+    if question is None:
+        LOG.warning(f"no stored question for thread id {thread_id}")
+        return
+
+    if question["escalated_at"] is not None:
+        LOG.info(f"thread id {thread_id} was already escalated to faculty")
+        return
+
+    QuestionAssigner.escalate_to_faculty(
+        thread_id=thread_id,
+        channel_id=body["channel"]["id"],
+        parent_ts=question["message_ts"],
+        button_ts=body["message"]["ts"],
+        button_blocks=body["message"]["blocks"],
+        button_text=body["message"].get("text", ""),
+        user_id=user_id,
+    )
+
+
+@app.view(ESCALATE_TO_FACULTY_CONFIRM_CALLBACK_ID)
+def handle_escalate_to_faculty_confirm(ack, body, view) -> None:
+    ack()
+
+    request = json.loads(view["private_metadata"])
+
+    thread_id = request["thread_id"]
+
+    question = store.get_question(thread_id)
+
+    if question is None:
+        LOG.warning(f"no stored question for thread id {thread_id}")
+        return
+
+    if question["escalated_at"] is not None:
+        LOG.info(f"thread id {thread_id} was already escalated to faculty")
+        return
+
+    QuestionAssigner.escalate_to_faculty(
+        thread_id=thread_id,
+        channel_id=request["channel_id"],
+        parent_ts=question["message_ts"],
+        button_ts=request["button_ts"],
+        button_blocks=request["button_blocks"],
+        button_text=request["button_text"],
+        user_id=body["user"]["id"],
     )
 
 
@@ -311,6 +393,8 @@ if __name__ == "__main__":
     QuestionAssigner.auto_help_interval_seconds = args.auto_help_interval
 
     load_user_ids()
+
+    check_faculty_user_ids()
 
     question_assigner = threading.Thread(target=assign_staff_to_new_questions)
     question_assigner.start()
