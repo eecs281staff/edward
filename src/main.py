@@ -378,6 +378,14 @@ def parse_args() -> argparse.Namespace:
         help="how often to check for questions that need help (default 60)",
     )
 
+    parser.add_argument(
+        "--post-delay-minutes",
+        type=float,
+        default=0,
+        metavar="MINUTES",
+        help="wait this long after a thread is created before posting it to slack (default 0)",
+    )
+
     return parser.parse_args()
 
 
@@ -391,6 +399,8 @@ if __name__ == "__main__":
     QuestionAssigner.auto_help_max_age = timedelta(hours=args.auto_help_max_age)
 
     QuestionAssigner.auto_help_interval_seconds = args.auto_help_interval
+
+    QuestionAssigner.post_delay = timedelta(minutes=args.post_delay_minutes)
 
     load_user_ids()
 

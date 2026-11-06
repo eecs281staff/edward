@@ -1,5 +1,6 @@
 import random
 import sqlite3
+import threading
 import time
 from datetime import datetime, timedelta
 
@@ -7,14 +8,15 @@ import store
 from common import LOG, TIMEZONE, format_duration, get_current_day
 from csvparser import DayOfWeek, Parser
 from discord_webhook import DISCORD_WEBHOOK_URL, post_announcement
-from edstem.models import Thread, ThreadSummary, decode
-from edstem.stream import StreamServerMessage, StreamThreadNew
+from edstem.models import HttpError, Thread, ThreadSummary, decode
+from edstem.stream import StreamServerMessage, StreamThread, StreamThreadNew
 from edstem_client import EDSTEM_COURSE_ID, ed_client
 from slack_app import (
     ASK_FOR_HELP_ACTION_ID,
     ESCALATE_TO_FACULTY_ACTION_ID,
     FACULTY_UNIQNAMES,
     NEW_QUESTION_PREFIX,
+    SLACK_CHANNEL_ID,
     UMICH_EMAIL_DOMAIN,
     add_reaction,
     app,
@@ -48,6 +50,13 @@ class QuestionAssigner:
 
     auto_help_interval_seconds: float = 60.0
 
+    # measured from the thread's created_at on Ed
+    post_delay: timedelta = timedelta(0)
+
+    post_lock = threading.Lock()
+
+    dri_lock = threading.Lock()
+
     # map from Edstem user id to uniqname
     staff_uniqnames_by_id: dict[int, str] = {}
 
@@ -76,14 +85,96 @@ class QuestionAssigner:
 
     @staticmethod
     def take_next_dri() -> str:
-        current_day = get_current_day()
+        with QuestionAssigner.dri_lock:
+            current_day = get_current_day()
 
-        dri = QuestionAssigner.day_to_responsible_staff_uniqnames[current_day][0]
-        QuestionAssigner.day_to_responsible_staff_uniqnames[current_day] = (
-            QuestionAssigner.day_to_responsible_staff_uniqnames[current_day][1:] + [dri]
+            dri = QuestionAssigner.day_to_responsible_staff_uniqnames[current_day][0]
+            QuestionAssigner.day_to_responsible_staff_uniqnames[current_day] = (
+                QuestionAssigner.day_to_responsible_staff_uniqnames[current_day][1:] + [dri]
+            )
+
+            return dri
+
+    @staticmethod
+    def schedule_post(thread: StreamThread | ThreadSummary, from_backfill: bool) -> None:
+        """Post a thread to slack once it is post_delay old."""
+        remaining = 0.0
+
+        try:
+            due_at = datetime.fromisoformat(thread.created_at) + QuestionAssigner.post_delay
+
+            remaining = (due_at - datetime.now(TIMEZONE)).total_seconds()
+        except ValueError:
+            LOG.warning(
+                f"unreadable created_at {thread.created_at} on thread {thread.id}, posting now"
+            )
+
+        if remaining <= 0:
+            QuestionAssigner.post_if_new(thread, from_backfill)
+            return
+
+        LOG.info(f"posting thread {thread.number} in {format_duration(remaining)}")
+
+        timer = threading.Timer(
+            remaining, QuestionAssigner.post_from_timer, args=(thread, from_backfill)
         )
+        timer.daemon = True
+        timer.start()
 
-        return dri
+    @staticmethod
+    def post_from_timer(thread: StreamThread | ThreadSummary, from_backfill: bool) -> None:
+        try:
+            QuestionAssigner.post_if_new(thread, from_backfill)
+        except Exception:
+            LOG.exception(f"could not post thread {thread.number}")
+
+    @staticmethod
+    def post_if_new(thread: StreamThread | ThreadSummary, from_backfill: bool) -> None:
+        """Post a thread unless it is already posted or was deleted.
+
+        The thread is fetched again because its answer status could have changed.
+        If there's an accepted answer, it will post without a ping.
+        If the question is getting backfilled from restart, it won't post anything.
+        """
+        with QuestionAssigner.post_lock:
+            if store.get_question(thread.id) is not None:
+                return
+
+            detail = ed_client.get_thread(thread.id)
+
+            if detail.is_err():
+                error = detail.unwrap_err()
+
+                if isinstance(error, HttpError) and error.status == 410:
+                    LOG.info(f"skipping thread {thread.number}, it was deleted")
+                    return
+
+                LOG.warning(f"could not load thread {thread.id}, posting it as is: {error}")
+
+                post_question(thread, QuestionAssigner.take_next_dri())
+
+                return
+
+            current = detail.unwrap().thread
+
+            if current.accepted_id is None:
+                post_question(current, QuestionAssigner.take_next_dri())
+            elif from_backfill:
+                LOG.info(f"skipping missed thread {thread.number}, it was already answered")
+                return
+            else:
+                message_ts = post_question(current, None)
+
+                store.set_accepted_id(current.id, current.accepted_id)
+
+                store.set_status(current.id, store.ANSWERED)
+
+                add_reaction(SLACK_CHANNEL_ID, message_ts, "white_check_mark")
+
+            first_answer = QuestionAssigner.find_first_staff_answer(current)
+
+            if first_answer is not None:
+                store.set_answer(current.id, *first_answer, current.accepted_id)
 
 
     @staticmethod
@@ -279,23 +370,7 @@ class QuestionAssigner:
             if thread.user_id in QuestionAssigner.staff_uniqnames_by_id and QuestionAssigner.skip_staff_posts:
                 continue
 
-            # someone answers quickly
-            if store.get_question(thread.id) is not None:
-                continue
-
-            detail = ed_client.get_thread(thread.id)
-
-            if detail.is_err():
-                LOG.warning(f"could not load thread {thread.id}: {detail.unwrap_err()}")
-                continue
-
-            if detail.unwrap().thread.accepted_id is not None:
-                LOG.info(f"skipping missed thread {thread.number}, it was already answered")
-                continue
-
-            LOG.info(f"posting missed thread {thread.number}")
-
-            post_question(thread, QuestionAssigner.take_next_dri())
+            QuestionAssigner.schedule_post(thread, from_backfill=True)
 
     @staticmethod
     def backfill_answers() -> None:
@@ -478,7 +553,7 @@ class QuestionAssigner:
             LOG.info(f"skipping post id {event_thread.id} because it was posted by a staff/admin\n")
             return
 
-        post_question(event_thread, QuestionAssigner.take_next_dri())
+        QuestionAssigner.schedule_post(event_thread, from_backfill=False)
 
 
 
@@ -542,6 +617,12 @@ class QuestionAssigner:
 
             # staff_answerer is empty when no staff answered, e.g. a student's answer was accepted
             dri = question["staff_answerer"] or question["dri"]
+
+            # dri is empty when the thread was posted with an accepted answer already on it
+            if not dri:
+                dri = QuestionAssigner.take_next_dri()
+
+                store.set_dri(thread_id, dri)
 
             reply = f"The accepted answer for this question was removed. {mention_user_by_uniqname(dri)}"
 

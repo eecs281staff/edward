@@ -29,6 +29,10 @@ it automatically, the same way the button does. Questions older than 24 hours ar
 skipped. Both times, and how often Edward checks, are set with `--auto-help-after`,
 `--auto-help-max-age`, and `--auto-help-interval`.
 
+There is also a configurable `--post-delay-minutes` flag which allows there to be a time gap between
+receiving an Ed question and posting a message on Slack for the question. This argument is 0
+by default.
+
 Because Edward pings on every question, let the staff know to have their notifications
 snoozed when they're sleeping/dont' want notifications.
 
@@ -40,8 +44,7 @@ responsible staff.
 It also handles posts that get deleted, and questions that were meant to be posts via other emoji
 reactions.
 
-If the relevant environment variable is set, Edward forwards every Edstem announcement to a Discord Webhook
-
+If the relevant environment variable is set, Edward forwards every Edstem announcement to a Discord Webhook.
 ## Usage
 
 Installation:

@@ -98,16 +98,22 @@ def build_post_url(course_id: int, question_id: int, question_number: int) -> st
     return f"<https://edstem.org/us/courses/{course_id}/discussion/{question_id}|{question_number}>"
 
 
-def build_new_post_message(course_id: int, event_thread: StreamThread | ThreadSummary, user: str) -> str:
+def build_new_post_message(course_id: int, event_thread: StreamThread | ThreadSummary, user: str | None) -> str:
+    assignee = (
+        "Already has an accepted answer."
+        if user is None
+        else f"Assignee: {mention_user_by_uniqname(user)}"
+    )
+
     if event_thread.type == "post":
         return (
         f"""{NEW_POST_PREFIX} {build_post_url(course_id, event_thread.id, event_thread.number)}.
 Note: if it is a post that should be a question, please turn the post into a question via Edit -> Question -> Save.
-Assignee: {mention_user_by_uniqname(user)}"""
+{assignee}"""
         )
     return (
     f"""{NEW_QUESTION_PREFIX} {build_post_url(course_id, event_thread.id, event_thread.number)}.
-Assignee: {mention_user_by_uniqname(user)}"""
+{assignee}"""
     )
 
 
@@ -237,30 +243,42 @@ def post_channel_message(text: str) -> None:
     app.client.chat_postMessage(channel=SLACK_CHANNEL_ID, text=text)
 
 
-def post_question(thread: StreamThread | ThreadSummary, dri: str) -> None:
-    """Announce a thread in slack and record it so updates can find it later."""
+def post_question(thread: StreamThread | ThreadSummary, dri: str | None) -> str:
+    """Announce a thread in slack and write to the database.
+
+    If there already exists an accepted answer, `dri` will be None and the message
+    returned won't ping anyone.
+    """
     message = build_new_post_message(EDSTEM_COURSE_ID, thread, dri)
+
+    blocks: list[dict] = [
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": message},
+        },
+    ]
+
+    if dri is not None:
+        blocks.append(build_question_buttons_block(thread.id, dri))
 
     posted = app.client.chat_postMessage(
         channel=SLACK_CHANNEL_ID,
         text=message,
         unfurl_links=False,
-        blocks=[
-            {
-                "type": "section",
-                "text": {"type": "mrkdwn", "text": message},
-            },
-            build_question_buttons_block(thread.id, dri),
-        ],
+        blocks=blocks,
     )
+
+    message_ts = cast(str, posted["ts"])
 
     store.add_question(
         thread_id=thread.id,
         number=thread.number,
         channel_id=SLACK_CHANNEL_ID,
-        message_ts=cast(str, posted["ts"]),
+        message_ts=message_ts,
         message_text=message,
-        dri=dri,
+        dri=dri or "",
     )
+
+    return message_ts
 
 

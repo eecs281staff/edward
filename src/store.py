@@ -207,6 +207,14 @@ def set_answer(
     return changed > 0
 
 
+def set_dri(thread_id: int, dri: str) -> None:
+    with _lock:
+        _connection.execute(
+            "UPDATE questions SET dri = ? WHERE thread_id = ?", (dri, thread_id)
+        )
+        _connection.commit()
+
+
 def set_escalated_by(thread_id: int, user_id: str) -> None:
     with _lock:
         _connection.execute(
