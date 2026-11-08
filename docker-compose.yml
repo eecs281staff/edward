@@ -3,5 +3,5 @@ services:
     build: .
     restart: unless-stopped
     volumes:
-      - ./.local.env:/app/.local.env:ro
+      - ./.env:/app/.env:ro
       - ./questions.db:/app/questions.db

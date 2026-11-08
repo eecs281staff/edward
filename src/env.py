@@ -1,6 +1,6 @@
 from dotenv import dotenv_values
 
-ENV_FILE = ".local.env"
+ENV_FILE = ".env"
 
 def get_env_variable(key: str) -> str:
     val =  dotenv_values(ENV_FILE)[key]

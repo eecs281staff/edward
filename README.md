@@ -32,17 +32,17 @@ notifications when they're sleeping or don't want notifications.
 | `--auto-help-interval` | Option (seconds) | `60` | How often to check for questions that need help |
 | `--post-delay-minutes` | Option (minutes) | `0` | Wait this long after a question is created before posting it to Slack |
 | `--include-staff-posts` | Flag | off | Assign posts and questions created by staff, which are skipped by default |
-| `EDSTEM_API_KEY` | `.local.env` | required | Edstem API token, obtained from <https://edstem.org/us/settings/api-tokens> |
-| `EDSTEM_EMAIL` | `.local.env` | required | Email for the bot's Edstem account, used to get the stream's session token |
-| `EDSTEM_PASSWORD` | `.local.env` | required | Password for the bot's Edstem account |
-| `COURSE_ID` | `.local.env` | required | Edstem course ID |
-| `SLACK_APP_TOKEN` | `.local.env` | required | Slack app token, see [Slack Setup](#slack-setup) |
-| `SLACK_BOT_TOKEN` | `.local.env` | required | Slack bot token, see [Slack Setup](#slack-setup) |
-| `SLACK_CHANNEL_ID` | `.local.env` | required | Slack channel Edward posts questions in |
-| `SLACK_CANARY_CHANNEL_ID` | `.local.env` | required | Slack channel the canary posts its heartbeat in |
+| `EDSTEM_API_KEY` | `.env` | required | Edstem API token, obtained from <https://edstem.org/us/settings/api-tokens> |
+| `EDSTEM_EMAIL` | `.env` | required | Email for the bot's Edstem account, used to get the stream's session token |
+| `EDSTEM_PASSWORD` | `.env` | required | Password for the bot's Edstem account |
+| `COURSE_ID` | `.env` | required | Edstem course ID |
+| `SLACK_APP_TOKEN` | `.env` | required | Slack app token, see [Slack Setup](#slack-setup) |
+| `SLACK_BOT_TOKEN` | `.env` | required | Slack bot token, see [Slack Setup](#slack-setup) |
+| `SLACK_CHANNEL_ID` | `.env` | required | Slack channel Edward posts questions in |
+| `SLACK_CANARY_CHANNEL_ID` | `.env` | required | Slack channel the canary posts its heartbeat in |
 | `staff.csv` | File | required | Staff schedule used for assignments. Each column is a day of the week and rows contain staff uniqnames |
-| `FACULTY_UNIQNAMES` | `.local.env` | empty | Comma-separated faculty uniqnames. The `escalate to faculty` button is hidden when empty |
-| `DISCORD_WEBHOOK_URL` | `.local.env` | empty | Discord webhook to forward announcements to. Forwarding is disabled when empty |
+| `FACULTY_UNIQNAMES` | `.env` | empty | Comma-separated faculty uniqnames. The `escalate to faculty` button is hidden when empty |
+| `DISCORD_WEBHOOK_URL` | `.env` | empty | Discord webhook to forward announcements to. Forwarding is disabled when empty |
 
 ### Slack Setup
 
@@ -66,7 +66,7 @@ the Channel ID at the bottom.
 
 Use a local environment and install `requirements.txt`
 
-Make sure you have the proper configurations in `.local.env` according to [Configuration Options](#configuration-options). You can copy from `.ex.local.env` as a start.
+Make sure you have the proper configurations in `.env` according to [Configuration Options](#configuration-options). You can copy from `.env.example` as a start.
 
 ### Execution
 
@@ -104,7 +104,7 @@ docker compose up --build
   * `models.py`: Edstem API data types and JSON decoding
   * `stream.py`: Edstem websocket stream client and message types
 * `edstem_client.py`: Initializes the Edstem client
-* `env.py`: Reads variables from `.local.env`
+* `env.py`: Reads variables from `.env`
 * `get_thread_id`: Script that fetches an Edstem thread
 * `main.py`: Opens websocket to Edstem client
 * `question_assigner.py`: Assigns questions to staff and handles thread events
