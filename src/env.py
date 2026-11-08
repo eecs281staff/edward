@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     AUTO_HELP_MAX_AGE_HOURS: float = 24
     AUTO_HELP_INTERVAL_SECONDS: float = 60
     POST_DELAY_MINUTES: float = 0
-    INCLUDE_STAFF_POSTS: bool = False
+    SKIP_STAFF_POSTS: bool = True
 
     @field_validator("FACULTY_UNIQNAMES", mode="before")
     @classmethod
