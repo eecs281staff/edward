@@ -5,7 +5,7 @@ import dotenv
 from edstem.client import Client
 from edstem.models import NewThread
 
-ENV_FILE = ".local.env"
+ENV_FILE = ".env"
 
 EDSTEM_API_KEY = dotenv.dotenv_values(ENV_FILE)["EDSTEM_API_KEY"] or ""
 EDSTEM_COURSE_ID = int(dotenv.dotenv_values(ENV_FILE)["COURSE_ID"] or 0)
