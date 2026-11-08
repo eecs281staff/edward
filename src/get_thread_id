@@ -1,15 +1,9 @@
 #!/usr/bin/env python3
 
-import dotenv
-
 from edstem.client import Client
+from env import settings
 
-ENV_FILE = ".env"
-
-EDSTEM_API_KEY = dotenv.dotenv_values(ENV_FILE)["EDSTEM_API_KEY"] or ""
-EDSTEM_COURSE_ID = int(dotenv.dotenv_values(ENV_FILE)["COURSE_ID"] or 0)
-
-ed_client = Client(EDSTEM_API_KEY, authentication="bearer")
+ed_client = Client(settings.EDSTEM_API_KEY, authentication="bearer")
 
 result = ed_client.get_thread(
     8242583

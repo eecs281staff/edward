@@ -109,7 +109,7 @@ docker compose up --build
   * `models.py`: Edstem API data types and JSON decoding
   * `stream.py`: Edstem websocket stream client and message types
 * `edstem_client.py`: Initializes the Edstem client
-* `env.py`: Reads variables from `.env`
+* `env.py`: Parses and validates `.env`
 * `get_thread_id`: Script that fetches an Edstem thread
 * `main.py`: Opens websocket to Edstem client
 * `question_assigner.py`: Assigns questions to staff and handles thread events

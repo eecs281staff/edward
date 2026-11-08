@@ -1,3 +1,3 @@
 slack-bolt==1.30.0
-dotenv
+pydantic-settings==2.16.2
 websockets

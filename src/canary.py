@@ -3,12 +3,10 @@ import time
 from datetime import datetime
 
 from common import LOG, TIMEZONE, format_duration
-from edstem_client import EDSTEM_COURSE_ID, ed_client
-from env import get_env_variable
+from edstem_client import ed_client
+from env import settings
 from slack_app import app
 from version import __version__
-
-CANARY_CHANNEL_ID = get_env_variable("SLACK_CANARY_CHANNEL_ID")
 
 # seconds between health checks
 CHECK_INTERVAL = 60.0
@@ -82,7 +80,7 @@ def status_line() -> str:
 
 
 def probe_api() -> str | None:
-    result = ed_client.list_course_threads(EDSTEM_COURSE_ID, limit=1)
+    result = ed_client.list_course_threads(settings.COURSE_ID, limit=1)
 
     if result.is_err():
         return f"the Edstem API is not answering: {result.unwrap_err()}"
@@ -128,7 +126,7 @@ def post_heartbeat(problems: list[str]) -> None:
 
     text = f"{status_line()} | {state} | as of {datetime.now(TIMEZONE).strftime('%H:%M')}"
 
-    app.client.chat_postMessage(channel=CANARY_CHANNEL_ID, text=text)
+    app.client.chat_postMessage(channel=settings.SLACK_CANARY_CHANNEL_ID, text=text)
 
 
 def report_change(problems: list[str]) -> None:
@@ -139,7 +137,7 @@ def report_change(problems: list[str]) -> None:
     else:
         text = "Edward is healthy again."
 
-    app.client.chat_postMessage(channel=CANARY_CHANNEL_ID, text=text)
+    app.client.chat_postMessage(channel=settings.SLACK_CANARY_CHANNEL_ID, text=text)
 
 
 def run() -> None:

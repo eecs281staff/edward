@@ -7,17 +7,15 @@ from datetime import datetime, timedelta
 import store
 from common import LOG, TIMEZONE, format_duration, get_current_day
 from csvparser import DayOfWeek, Parser
-from discord_webhook import DISCORD_WEBHOOK_URL, post_announcement
+from discord_webhook import post_announcement
 from edstem.models import HttpError, Thread, ThreadSummary, decode
 from edstem.stream import StreamServerMessage, StreamThread, StreamThreadNew
-from edstem_client import EDSTEM_COURSE_ID, ed_client
-from env import get_bool_env_variable, get_float_env_variable
+from edstem_client import ed_client
+from env import settings
 from slack_app import (
     ASK_FOR_HELP_ACTION_ID,
     ESCALATE_TO_FACULTY_ACTION_ID,
-    FACULTY_UNIQNAMES,
     NEW_QUESTION_PREFIX,
-    SLACK_CHANNEL_ID,
     UMICH_EMAIL_DOMAIN,
     add_reaction,
     app,
@@ -40,26 +38,22 @@ class QuestionAssigner:
     # making testing a bit harder
     # also prevents staff from "gaming" the system
     # turned off with INCLUDE_STAFF_POSTS for easier testing
-    skip_staff_posts: bool = not get_bool_env_variable("INCLUDE_STAFF_POSTS", False)
+    skip_staff_posts: bool = not settings.INCLUDE_STAFF_POSTS
 
     # how long a question can go without a staff answer before help is asked for
     auto_help_after: timedelta = timedelta(
-        minutes=get_float_env_variable("AUTO_HELP_AFTER_MINUTES", 60)
+        minutes=settings.AUTO_HELP_AFTER_MINUTES
     )
 
     # older questions are left alone, so a first deploy or a long outage does not
     # ask for help on every old question at once
     auto_help_max_age: timedelta = timedelta(
-        hours=get_float_env_variable("AUTO_HELP_MAX_AGE_HOURS", 24)
-    )
-
-    auto_help_interval_seconds: float = get_float_env_variable(
-        "AUTO_HELP_INTERVAL_SECONDS", 60
+        hours=settings.AUTO_HELP_MAX_AGE_HOURS
     )
 
     # measured from the thread's created_at on Ed
     post_delay: timedelta = timedelta(
-        minutes=get_float_env_variable("POST_DELAY_MINUTES", 0)
+        minutes=settings.POST_DELAY_MINUTES
     )
 
     post_lock = threading.Lock()
@@ -85,7 +79,7 @@ class QuestionAssigner:
         QuestionAssigner.staff_uniqnames_by_id.update(
             {
                 user.user_id: user.email.removesuffix(UMICH_EMAIL_DOMAIN)
-                for user in ed_client.get_course_users(EDSTEM_COURSE_ID).unwrap()
+                for user in ed_client.get_course_users(settings.COURSE_ID).unwrap()
                 if user.course_role != "student"
             }
         )
@@ -178,7 +172,7 @@ class QuestionAssigner:
 
                 store.set_status(current.id, store.ANSWERED)
 
-                add_reaction(SLACK_CHANNEL_ID, message_ts, "white_check_mark")
+                add_reaction(settings.SLACK_CHANNEL_ID, message_ts, "white_check_mark")
 
             first_answer = QuestionAssigner.find_first_staff_answer(current)
 
@@ -259,11 +253,11 @@ class QuestionAssigner:
         ``parent_ts`` and ``button_ts`` work the same as in request_extra_help.
         ``user_id`` is the slack user id of whoever pressed the button.
         """
-        if not FACULTY_UNIQNAMES:
+        if not settings.FACULTY_UNIQNAMES:
             LOG.warning("no faculty to escalate to")
             return
 
-        mentions = ", ".join(mention_user_by_uniqname(faculty) for faculty in FACULTY_UNIQNAMES)
+        mentions = ", ".join(mention_user_by_uniqname(faculty) for faculty in settings.FACULTY_UNIQNAMES)
 
         app.client.chat_postMessage(
             channel=channel_id,
@@ -322,7 +316,7 @@ class QuestionAssigner:
 
         while True:
             result = ed_client.list_course_threads(
-                EDSTEM_COURSE_ID, limit=THREAD_PAGE_SIZE, offset=offset, sort="new"
+                settings.COURSE_ID, limit=THREAD_PAGE_SIZE, offset=offset, sort="new"
             )
 
             if result.is_err():
@@ -366,7 +360,7 @@ class QuestionAssigner:
 
         for thread in missed:
             if thread.type == "announcement":
-                if DISCORD_WEBHOOK_URL is not None and not store.is_announcement_sent(thread.id):
+                if settings.DISCORD_WEBHOOK_URL is not None and not store.is_announcement_sent(thread.id):
                     detail = ed_client.get_thread(thread.id)
 
                     if detail.is_err():
@@ -465,7 +459,7 @@ class QuestionAssigner:
             except Exception as exception:
                 LOG.warning(f"could not auto-ask for help: {exception}")
 
-            time.sleep(QuestionAssigner.auto_help_interval_seconds)
+            time.sleep(settings.AUTO_HELP_INTERVAL_SECONDS)
 
     @staticmethod
     def auto_request_help() -> None:
@@ -550,7 +544,7 @@ class QuestionAssigner:
 
         event_thread = event.thread
 
-        if event_thread.course_id != EDSTEM_COURSE_ID:
+        if event_thread.course_id != settings.COURSE_ID:
             LOG.warning(f"Received message for course id {event_thread.course_id}")
             return
 
