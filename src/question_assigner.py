@@ -11,6 +11,7 @@ from discord_webhook import DISCORD_WEBHOOK_URL, post_announcement
 from edstem.models import HttpError, Thread, ThreadSummary, decode
 from edstem.stream import StreamServerMessage, StreamThread, StreamThreadNew
 from edstem_client import EDSTEM_COURSE_ID, ed_client
+from env import get_bool_env_variable, get_float_env_variable
 from slack_app import (
     ASK_FOR_HELP_ACTION_ID,
     ESCALATE_TO_FACULTY_ACTION_ID,
@@ -38,20 +39,28 @@ class QuestionAssigner:
     # if on, will skip all posts and questions created by admins,
     # making testing a bit harder
     # also prevents staff from "gaming" the system
-    # turned off with the --include-staff-posts flag for easier testing
-    skip_staff_posts: bool = True
+    # turned off with INCLUDE_STAFF_POSTS for easier testing
+    skip_staff_posts: bool = not get_bool_env_variable("INCLUDE_STAFF_POSTS", False)
 
     # how long a question can go without a staff answer before help is asked for
-    auto_help_after: timedelta = timedelta(minutes=60)
+    auto_help_after: timedelta = timedelta(
+        minutes=get_float_env_variable("AUTO_HELP_AFTER_MINUTES", 60)
+    )
 
     # older questions are left alone, so a first deploy or a long outage does not
     # ask for help on every old question at once
-    auto_help_max_age: timedelta = timedelta(hours=24)
+    auto_help_max_age: timedelta = timedelta(
+        hours=get_float_env_variable("AUTO_HELP_MAX_AGE_HOURS", 24)
+    )
 
-    auto_help_interval_seconds: float = 60.0
+    auto_help_interval_seconds: float = get_float_env_variable(
+        "AUTO_HELP_INTERVAL_SECONDS", 60
+    )
 
     # measured from the thread's created_at on Ed
-    post_delay: timedelta = timedelta(0)
+    post_delay: timedelta = timedelta(
+        minutes=get_float_env_variable("POST_DELAY_MINUTES", 0)
+    )
 
     post_lock = threading.Lock()
 
