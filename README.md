@@ -2,49 +2,69 @@
 
 The helpful Edstem bot
 
-## Architecture Components
+## Source Files
 
+* `canary.py`: Health checks that post a heartbeat to the canary Slack channel
+* `common.py`: Shared logger, timezone, and date helpers
+* `create_test_question`: Script that creates a test question on Edstem
+* `csvparser.py`: Parses `staff.csv` into a staff schedule by day
+* `discord_webhook.py`: Forwards Edstem announcements to Discord
+* `edstem/`: Edstem API and websocket stream client
+  * `__init__.py`: Re-exports the package's public names
+  * `client.py`: Edstem REST API client and login token request
+  * `models.py`: Edstem API data types and JSON decoding
+  * `stream.py`: Edstem websocket stream client and message types
+* `edstem_client.py`: Initializes the Edstem client
+* `env.py`: Reads variables from `.local.env`
+* `get_thread_id`: Script that fetches an Edstem thread
+* `main.py`: Opens websocket to Edstem client
+* `question_assigner.py`: Assigns questions to staff and handles thread events
 * `slack_app.py`: Slack client operations, e.g. posting message to channel
 * `store.py`: Database operations
-* `question_assigner.py`
-* `edstem_client.py`: Initializes the Edstem client
-* `main.py`: Opens websocket to Edstem client
+* `version.py`: Edward's version number
 
-When receiving a new message, Edward will send a Slack message notifying the
-user assigned to that question. This works through parsing `staff.csv`, where
-each column is associated with a day of the week, and rows contain uniqnames for
-staff.
+## Features
 
-There is an `ask for help` button which appears on questions, where the user
-assigned can press, which pings other individuals. The way this works is by pinging
-at least `3` other users, first prioritizing users that are also responsible for
-that day, then pinging other users (until the minimum 3 is reached) via random
-permutations.
+* Each new question is posted to Slack, and the staff member assigned to it is
+  pinged.
+* Each question's Slack message has an `ask for help` button. When it is
+  pressed, at least 3 other staff are pinged, prioritizing others responsible
+  for that day, then filling the rest via random permutations.
+* Questions that go too long without a staff answer have other staff pinged for
+  help automatically.
+* Each question's Slack message has an `escalate to faculty` button. When it is
+  pressed, the course faculty are pinged.
+* Thread status is shown with emoji reactions on Slack messages:
+  * ✅ when a question has an "accepted" answer. If it loses its accepted answer,
+    the reaction is removed and the responsible staff are pinged.
+  * 📝 when a question is turned into a post.
+  * 🗑️ when a thread is deleted.
+* Every Edstem announcement can be forwarded to a Discord webhook.
 
-There is also an `escalate to faculty` button, which pings the faculty for the course
-when pressed. The faculty list is configured in the .local.env file
+Because staff are pinged on every question, let them know to snooze their
+notifications when they're sleeping or don't want notifications.
 
-If a question goes 60 minutes without a staff answer, Edward asks for extra help on
-it automatically, the same way the button does. Questions older than 24 hours are
-skipped. Both times, and how often Edward checks, are set with `--auto-help-after`,
-`--auto-help-max-age`, and `--auto-help-interval`.
+## Configuration Options
 
-There is also a configurable `--post-delay-minutes` flag which allows there to be a time gap between
-receiving an Ed question and posting a message on Slack for the question. This argument is 0
-by default.
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--auto-help-after` | Option (minutes) | `60` | Automatically ask for help on questions with no staff answer after this long |
+| `--auto-help-max-age` | Option (hours) | `24` | Never automatically ask for help on questions older than this |
+| `--auto-help-interval` | Option (seconds) | `60` | How often to check for questions that need help |
+| `--post-delay-minutes` | Option (minutes) | `0` | Wait this long after a question is created before posting it to Slack |
+| `--include-staff-posts` | Flag | off | Assign posts and questions created by staff, which are skipped by default |
+| `EDSTEM_API_KEY` | `.local.env` | required | Edstem API token, obtained from <https://edstem.org/us/settings/api-tokens> |
+| `EDSTEM_EMAIL` | `.local.env` | required | Email for the bot's Edstem account, used to get the stream's session token |
+| `EDSTEM_PASSWORD` | `.local.env` | required | Password for the bot's Edstem account |
+| `COURSE_ID` | `.local.env` | required | Edstem course ID |
+| `SLACK_APP_TOKEN` | `.local.env` | required | Slack app token, see [Slack Setup](#slack-setup) |
+| `SLACK_BOT_TOKEN` | `.local.env` | required | Slack bot token, see [Slack Setup](#slack-setup) |
+| `SLACK_CHANNEL_ID` | `.local.env` | required | Slack channel Edward posts questions in |
+| `SLACK_CANARY_CHANNEL_ID` | `.local.env` | required | Slack channel the canary posts its heartbeat in |
+| `staff.csv` | File | required | Staff schedule used for assignments. Each column is a day of the week and rows contain staff uniqnames |
+| `FACULTY_UNIQNAMES` | `.local.env` | empty | Comma-separated faculty uniqnames. The `escalate to faculty` button is hidden when empty |
+| `DISCORD_WEBHOOK_URL` | `.local.env` | empty | Discord webhook to forward announcements to. Forwarding is disabled when empty |
 
-Because Edward pings on every question, let the staff know to have their notifications
-snoozed when they're sleeping/dont' want notifications.
-
-Edward also tracks the status of questions. When it receives an event which adds an
-"accepted" answer to a thread, it reacts to the message Edward sent with ✅. When a
-question loses an "accepted" answer, Edward removes the reaction, and pings the
-responsible staff.
-
-It also handles posts that get deleted, and questions that were meant to be posts via other emoji
-reactions.
-
-If the relevant environment variable is set, Edward forwards every Edstem announcement to a Discord Webhook.
 ## Usage
 
 Installation:
