@@ -25,24 +25,29 @@ notifications when they're sleeping or don't want notifications.
 
 ## Configuration Options
 
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `--auto-help-after` | Option (minutes) | `60` | Automatically ask for help on questions with no staff answer after this long |
-| `--auto-help-max-age` | Option (hours) | `24` | Never automatically ask for help on questions older than this |
-| `--auto-help-interval` | Option (seconds) | `60` | How often to check for questions that need help |
-| `--post-delay-minutes` | Option (minutes) | `0` | Wait this long after a question is created before posting it to Slack |
-| `--include-staff-posts` | Flag | off | Assign posts and questions created by staff, which are skipped by default |
-| `EDSTEM_API_KEY` | `.env` | required | Edstem API token, obtained from <https://edstem.org/us/settings/api-tokens> |
-| `EDSTEM_EMAIL` | `.env` | required | Email for the bot's Edstem account, used to get the stream's session token |
-| `EDSTEM_PASSWORD` | `.env` | required | Password for the bot's Edstem account |
-| `COURSE_ID` | `.env` | required | Edstem course ID |
-| `SLACK_APP_TOKEN` | `.env` | required | Slack app token, see [Slack Setup](#slack-setup) |
-| `SLACK_BOT_TOKEN` | `.env` | required | Slack bot token, see [Slack Setup](#slack-setup) |
-| `SLACK_CHANNEL_ID` | `.env` | required | Slack channel Edward posts questions in |
-| `SLACK_CANARY_CHANNEL_ID` | `.env` | required | Slack channel the canary posts its heartbeat in |
-| `staff.csv` | File | required | Staff schedule used for assignments. Each column is a day of the week and rows contain staff uniqnames |
-| `FACULTY_UNIQNAMES` | `.env` | empty | Comma-separated faculty uniqnames. The `escalate to faculty` button is hidden when empty |
-| `DISCORD_WEBHOOK_URL` | `.env` | empty | Discord webhook to forward announcements to. Forwarding is disabled when empty |
+### `.env`
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `EDSTEM_API_KEY` | required | Edstem API token, obtained from <https://edstem.org/us/settings/api-tokens> |
+| `EDSTEM_EMAIL` | required | Email for the bot's Edstem account, used to get the stream's session token |
+| `EDSTEM_PASSWORD` | required | Password for the bot's Edstem account |
+| `COURSE_ID` | required | Edstem course ID |
+| `SLACK_APP_TOKEN` | required | Slack app token, see [Slack Setup](#slack-setup) |
+| `SLACK_BOT_TOKEN` | required | Slack bot token, see [Slack Setup](#slack-setup) |
+| `SLACK_CHANNEL_ID` | required | Slack channel Edward posts questions in |
+| `SLACK_CANARY_CHANNEL_ID` | required | Slack channel the canary posts its heartbeat in |
+| `FACULTY_UNIQNAMES` | empty | Comma-separated faculty uniqnames. The `escalate to faculty` button is hidden when empty |
+| `DISCORD_WEBHOOK_URL` | empty | Discord webhook to forward announcements to. Forwarding is disabled when empty |
+| `AUTO_HELP_AFTER_MINUTES` | `60` | Automatically ask for help on questions with no staff answer after this many minutes |
+| `AUTO_HELP_MAX_AGE_HOURS` | `24` | Never automatically ask for help on questions older than this many hours |
+| `AUTO_HELP_INTERVAL_SECONDS` | `60` | How often to check for questions that need help, in seconds |
+| `POST_DELAY_MINUTES` | `0` | Wait this many minutes after a question is created before posting it to Slack |
+| `INCLUDE_STAFF_POSTS` | `false` | Set to `true` to assign posts and questions created by staff, which are skipped by default |
+
+### `staff.csv`
+
+The staff schedule used for assignments. Each column is a day of the week and rows contain staff uniqnames.
 
 ### Slack Setup
 

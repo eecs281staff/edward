@@ -1,9 +1,7 @@
-import argparse
 import json
 import random
 import threading
 import time
-from datetime import timedelta
 
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
@@ -345,63 +343,7 @@ def assign_staff_to_new_questions() -> None:
 
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Edward, the helpful Edstem bot")
-
-    parser.add_argument(
-        "--include-staff-posts",
-        action="store_true",
-        help="assign posts and questions created by staff, which are skipped by default",
-    )
-
-    parser.add_argument(
-        "--auto-help-after",
-        type=float,
-        default=60,
-        metavar="MINUTES",
-        help="ask for extra help on questions with no staff answer after this long (default 60)",
-    )
-
-    parser.add_argument(
-        "--auto-help-max-age",
-        type=float,
-        default=24,
-        metavar="HOURS",
-        help="never auto-ask for help on questions older than this (default 24)",
-    )
-
-    parser.add_argument(
-        "--auto-help-interval",
-        type=float,
-        default=60,
-        metavar="SECONDS",
-        help="how often to check for questions that need help (default 60)",
-    )
-
-    parser.add_argument(
-        "--post-delay-minutes",
-        type=float,
-        default=0,
-        metavar="MINUTES",
-        help="wait this long after a thread is created before posting it to slack (default 0)",
-    )
-
-    return parser.parse_args()
-
-
 if __name__ == "__main__":
-    args = parse_args()
-
-    QuestionAssigner.skip_staff_posts = not args.include_staff_posts
-
-    QuestionAssigner.auto_help_after = timedelta(minutes=args.auto_help_after)
-
-    QuestionAssigner.auto_help_max_age = timedelta(hours=args.auto_help_max_age)
-
-    QuestionAssigner.auto_help_interval_seconds = args.auto_help_interval
-
-    QuestionAssigner.post_delay = timedelta(minutes=args.post_delay_minutes)
-
     load_user_ids()
 
     check_faculty_user_ids()
