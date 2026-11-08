@@ -43,7 +43,7 @@ notifications when they're sleeping or don't want notifications.
 | `AUTO_HELP_MAX_AGE_HOURS` | `24` | Never automatically ask for help on questions older than this many hours |
 | `AUTO_HELP_INTERVAL_SECONDS` | `60` | How often to check for questions that need help, in seconds |
 | `POST_DELAY_MINUTES` | `0` | Wait this many minutes after a question is created before posting it to Slack |
-| `INCLUDE_STAFF_POSTS` | `false` | Set to `true` to assign posts and questions created by staff, which are skipped by default |
+| `SKIP_STAFF_POSTS` | `true` | Set to `false` to assign posts and questions created by staff, which are skipped by default |
 
 ### `staff.csv`
 

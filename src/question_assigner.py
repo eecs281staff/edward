@@ -37,8 +37,8 @@ class QuestionAssigner:
     # if on, will skip all posts and questions created by admins,
     # making testing a bit harder
     # also prevents staff from "gaming" the system
-    # turned off with INCLUDE_STAFF_POSTS for easier testing
-    skip_staff_posts: bool = not settings.INCLUDE_STAFF_POSTS
+    # turned off with SKIP_STAFF_POSTS=false for easier testing
+    skip_staff_posts: bool = settings.SKIP_STAFF_POSTS
 
     # how long a question can go without a staff answer before help is asked for
     auto_help_after_minutes: float = settings.AUTO_HELP_AFTER_MINUTES
