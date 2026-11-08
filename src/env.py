@@ -1,36 +1,41 @@
-from dotenv import dotenv_values
+from typing import Annotated
 
-ENV_FILE = ".env"
-
-def get_env_variable(key: str) -> str:
-    val =  dotenv_values(ENV_FILE)[key]
-    if not val:
-        raise ValueError(f"key {key} not found in environment")
-
-    return val
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
-def get_optional_env_variable(key: str) -> str | None:
-    return dotenv_values(ENV_FILE).get(key)
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_ignore_empty=True)
+
+    EDSTEM_API_KEY: str
+    EDSTEM_EMAIL: str
+    EDSTEM_PASSWORD: str
+
+    COURSE_ID: int
+
+    SLACK_APP_TOKEN: str
+    SLACK_BOT_TOKEN: str
+    SLACK_CHANNEL_ID: str
+    SLACK_CANARY_CHANNEL_ID: str
+
+    DISCORD_WEBHOOK_URL: str | None = None
+
+    FACULTY_UNIQNAMES: Annotated[list[str], NoDecode] = []
+
+    AUTO_HELP_AFTER_MINUTES: float = 60
+    AUTO_HELP_MAX_AGE_HOURS: float = 24
+    AUTO_HELP_INTERVAL_SECONDS: float = 60
+    POST_DELAY_MINUTES: float = 0
+    INCLUDE_STAFF_POSTS: bool = False
+
+    @field_validator("FACULTY_UNIQNAMES", mode="before")
+    @classmethod
+    def split_uniqnames(cls, val: object) -> object:
+        if isinstance(val, str):
+            return [uniqname.strip() for uniqname in val.split(",") if uniqname.strip()]
+
+        return val
 
 
-def get_float_env_variable(key: str, default: float) -> float:
-    val = get_optional_env_variable(key)
-    if not val:
-        return default
-
-    return float(val)
-
-
-def get_bool_env_variable(key: str, default: bool) -> bool:
-    val = get_optional_env_variable(key)
-    if not val:
-        return default
-
-    if val.lower() == "true":
-        return True
-
-    if val.lower() == "false":
-        return False
-
-    raise ValueError(f"key {key} must be true or false, got {val}")
+# required fields are filled from .env but the type checker doesn't know that
+settings = Settings()  # type: ignore[call-arg]

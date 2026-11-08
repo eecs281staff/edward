@@ -11,8 +11,7 @@ from common import LOG
 from edstem.client import request_token
 from edstem.models import Error, ParseError, Result
 from edstem.stream import Stream
-from edstem_client import EDSTEM_COURSE_ID, EDSTEM_EMAIL, EDSTEM_PASSWORD
-from env import get_env_variable
+from env import settings
 from question_assigner import QuestionAssigner
 from slack_app import (
     ASK_FOR_HELP_CONFIRM_CALLBACK_ID,
@@ -230,7 +229,7 @@ def log_in() -> Result[str, Error]:
 
     _last_token_refresh_at = time.monotonic()
 
-    return request_token(EDSTEM_EMAIL, EDSTEM_PASSWORD)
+    return request_token(settings.EDSTEM_EMAIL, settings.EDSTEM_PASSWORD)
 
 
 def refresh_auth_token(stream: Stream) -> None:
@@ -274,7 +273,7 @@ def assign_staff_to_new_questions() -> None:
     if res.is_err():
         raise ValueError(f"Failed to connect to stream: {res.error}")
 
-    stream.subscribe_course(int(EDSTEM_COURSE_ID))
+    stream.subscribe_course(settings.COURSE_ID)
 
 
     # done after subscribing so a question arriving right now is caught either
@@ -315,7 +314,7 @@ def assign_staff_to_new_questions() -> None:
 
             canary.note_stream_up()
 
-            stream.subscribe_course(EDSTEM_COURSE_ID)
+            stream.subscribe_course(settings.COURSE_ID)
 
             # the stream does not replay what it sent while we were away, so pick
             # up anything that came in during the drop
@@ -353,4 +352,4 @@ if __name__ == "__main__":
 
     canary.start(question_assigner)
 
-    SocketModeHandler(app, get_env_variable("SLACK_APP_TOKEN")).start()
+    SocketModeHandler(app, settings.SLACK_APP_TOKEN).start()

@@ -8,26 +8,16 @@ import store
 from common import LOG
 from edstem.models import ThreadSummary
 from edstem.stream import StreamThread
-from edstem_client import EDSTEM_COURSE_ID
-from env import get_env_variable, get_optional_env_variable
+from env import settings
 
-app = App(token=get_env_variable("SLACK_BOT_TOKEN"))
+app = App(token=settings.SLACK_BOT_TOKEN)
 app.client.retry_handlers.append(RateLimitErrorRetryHandler(max_retry_count=3))
-
-SLACK_CHANNEL_ID = get_env_variable('SLACK_CHANNEL_ID')
 
 ASK_FOR_HELP_ACTION_ID = 'ask_for_help'
 ASK_FOR_HELP_CONFIRM_CALLBACK_ID = 'confirm_ask_for_help'
 ESCALATE_TO_FACULTY_ACTION_ID = 'escalate_to_faculty'
 ESCALATE_TO_FACULTY_CONFIRM_CALLBACK_ID = 'confirm_escalate_to_faculty'
 UMICH_EMAIL_DOMAIN = "@umich.edu"
-
-# the escalate button is hidden when this is empty
-FACULTY_UNIQNAMES: list[str] = [
-    uniqname.strip()
-    for uniqname in (get_optional_env_variable("FACULTY_UNIQNAMES") or "").split(",")
-    if uniqname.strip()
-]
 
 NEW_POST_PREFIX = "New Edstem post:"
 NEW_QUESTION_PREFIX = "New Edstem question:"
@@ -60,7 +50,7 @@ def load_user_ids() -> None:
 
 def check_faculty_user_ids() -> None:
     """Check if all faculty uniqnames are in the Slack workspaces"""
-    for uniqname in FACULTY_UNIQNAMES:
+    for uniqname in settings.FACULTY_UNIQNAMES:
         try:
             get_user_id_by_uniqname(uniqname)
         except SlackApiError as error:
@@ -129,7 +119,7 @@ def build_question_buttons_block(thread_id: int, dri: str, faculty_button: bool 
         }
     ]
 
-    if faculty_button and FACULTY_UNIQNAMES:
+    if faculty_button and settings.FACULTY_UNIQNAMES:
         elements.append(
             {
                 "type": "button",
@@ -240,7 +230,7 @@ def remove_reaction(channel_id: str, message_ts: str, name: str) -> None:
 
 def post_channel_message(text: str) -> None:
     """Post a plain message to the channel."""
-    app.client.chat_postMessage(channel=SLACK_CHANNEL_ID, text=text)
+    app.client.chat_postMessage(channel=settings.SLACK_CHANNEL_ID, text=text)
 
 
 def post_question(thread: StreamThread | ThreadSummary, dri: str | None) -> str:
@@ -249,7 +239,7 @@ def post_question(thread: StreamThread | ThreadSummary, dri: str | None) -> str:
     If there already exists an accepted answer, `dri` will be None and the message
     returned won't ping anyone.
     """
-    message = build_new_post_message(EDSTEM_COURSE_ID, thread, dri)
+    message = build_new_post_message(settings.COURSE_ID, thread, dri)
 
     blocks: list[dict] = [
         {
@@ -262,7 +252,7 @@ def post_question(thread: StreamThread | ThreadSummary, dri: str | None) -> str:
         blocks.append(build_question_buttons_block(thread.id, dri))
 
     posted = app.client.chat_postMessage(
-        channel=SLACK_CHANNEL_ID,
+        channel=settings.SLACK_CHANNEL_ID,
         text=message,
         unfurl_links=False,
         blocks=blocks,
@@ -273,7 +263,7 @@ def post_question(thread: StreamThread | ThreadSummary, dri: str | None) -> str:
     store.add_question(
         thread_id=thread.id,
         number=thread.number,
-        channel_id=SLACK_CHANNEL_ID,
+        channel_id=settings.SLACK_CHANNEL_ID,
         message_ts=message_ts,
         message_text=message,
         dri=dri or "",
