@@ -58,22 +58,32 @@ the Channel ID at the bottom. Make sure you add Edward to that channel!
 
 ## Usage
 
-Installation:
+### Installation
 
 Use a local environment and install `requirements.txt`
 
-Make sure you have set up `.local.env`. You can see an example with `ex.local.env`
+Make sure you have the proper configurations in `.local.env` according to [Configuration Options](#configuration-options). You can copy from `.ex.local.env` as a start.
 
-Running the bot directly on your system:
+### Execution
 
-`python3 src/main.py`
+There are two options:
 
-Alternatively, using Docker Compose:
+* Directly on your system:
 
-`docker compose up --build`
+```bash
+python3 src/main.py
+```
 
-NOTE: You must create `questions.db` first before starting the Docker container,
-otherwise Docker will create a directory called `questions.db`, causing sqlite to fail.
+* Using Docker Compose:
+
+```bash
+touch questions.db
+docker compose up --build
+```
+
+> [!WARNING]
+> You must create `questions.db` first before starting the Docker container,
+> otherwise Docker will create a directory called `questions.db`, causing sqlite to fail.
 
 ## Development
 
