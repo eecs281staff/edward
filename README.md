@@ -2,27 +2,6 @@
 
 The helpful Edstem bot
 
-## Source Files
-
-* `canary.py`: Health checks that post a heartbeat to the canary Slack channel
-* `common.py`: Shared logger, timezone, and date helpers
-* `create_test_question`: Script that creates a test question on Edstem
-* `csvparser.py`: Parses `staff.csv` into a staff schedule by day
-* `discord_webhook.py`: Forwards Edstem announcements to Discord
-* `edstem/`: Edstem API and websocket stream client
-  * `__init__.py`: Re-exports the package's public names
-  * `client.py`: Edstem REST API client and login token request
-  * `models.py`: Edstem API data types and JSON decoding
-  * `stream.py`: Edstem websocket stream client and message types
-* `edstem_client.py`: Initializes the Edstem client
-* `env.py`: Reads variables from `.local.env`
-* `get_thread_id`: Script that fetches an Edstem thread
-* `main.py`: Opens websocket to Edstem client
-* `question_assigner.py`: Assigns questions to staff and handles thread events
-* `slack_app.py`: Slack client operations, e.g. posting message to channel
-* `store.py`: Database operations
-* `version.py`: Edward's version number
-
 ## Features
 
 * Each new question is posted to Slack, and the staff member assigned to it is
@@ -65,6 +44,18 @@ notifications when they're sleeping or don't want notifications.
 | `FACULTY_UNIQNAMES` | `.local.env` | empty | Comma-separated faculty uniqnames. The `escalate to faculty` button is hidden when empty |
 | `DISCORD_WEBHOOK_URL` | `.local.env` | empty | Discord webhook to forward announcements to. Forwarding is disabled when empty |
 
+### Slack Setup
+
+You'll need the following from Slack:  
+SLACK_APP_TOKEN
+SLACK_BOT_TOKEN
+SLACK_CHANNEL_ID
+Follow the instructions [here](https://docs.slack.dev/tools/bolt-python/getting-started/)
+on how to get the first two. NOTE: You'll need admin permissions to add Edward to your workspace.
+For the channel ID, right click on the channel you want
+Edward to send messages in, Channel Details > View Channel Details, and you can copy
+the Channel ID at the bottom. Make sure you add Edward to that channel!
+
 ## Usage
 
 Installation:
@@ -84,21 +75,31 @@ Alternatively, using Docker Compose:
 NOTE: You must create `questions.db` first before starting the Docker container,
 otherwise Docker will create a directory called `questions.db`, causing sqlite to fail.
 
-## Testing
+## Development
+
+### Source Files
+
+* `canary.py`: Health checks that post a heartbeat to the canary Slack channel
+* `common.py`: Shared logger, timezone, and date helpers
+* `create_test_question`: Script that creates a test question on Edstem
+* `csvparser.py`: Parses `staff.csv` into a staff schedule by day
+* `discord_webhook.py`: Forwards Edstem announcements to Discord
+* `edstem/`: Edstem API and websocket stream client
+  * `__init__.py`: Re-exports the package's public names
+  * `client.py`: Edstem REST API client and login token request
+  * `models.py`: Edstem API data types and JSON decoding
+  * `stream.py`: Edstem websocket stream client and message types
+* `edstem_client.py`: Initializes the Edstem client
+* `env.py`: Reads variables from `.local.env`
+* `get_thread_id`: Script that fetches an Edstem thread
+* `main.py`: Opens websocket to Edstem client
+* `question_assigner.py`: Assigns questions to staff and handles thread events
+* `slack_app.py`: Slack client operations, e.g. posting message to channel
+* `store.py`: Database operations
+* `version.py`: Edward's version number
+
+### Testing
 
 You can create a question using `src/create_test_question`
 
 You can test other endpoints using a similar outline as the previously-mentioned file.
-
-## Slack Setup
-
-You'll need the following from Slack:  
-SLACK_APP_TOKEN
-SLACK_BOT_TOKEN
-SLACK_CHANNEL_ID
-Follow the instructions [here](https://docs.slack.dev/tools/bolt-python/getting-started/)
-on how to get the first two. NOTE: You'll need admin permissions to add Edward to your workspace.
-For the channel ID, right click on the channel you want
-Edward to send messages in, Channel Details > View Channel Details, and you can copy
-the Channel ID at the bottom. Make sure you add Edward to that channel!
-
