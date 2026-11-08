@@ -41,20 +41,14 @@ class QuestionAssigner:
     skip_staff_posts: bool = not settings.INCLUDE_STAFF_POSTS
 
     # how long a question can go without a staff answer before help is asked for
-    auto_help_after: timedelta = timedelta(
-        minutes=settings.AUTO_HELP_AFTER_MINUTES
-    )
+    auto_help_after_minutes: float = settings.AUTO_HELP_AFTER_MINUTES
 
     # older questions are left alone, so a first deploy or a long outage does not
     # ask for help on every old question at once
-    auto_help_max_age: timedelta = timedelta(
-        hours=settings.AUTO_HELP_MAX_AGE_HOURS
-    )
+    auto_help_max_age_hours: float = settings.AUTO_HELP_MAX_AGE_HOURS
 
     # measured from the thread's created_at on Ed
-    post_delay: timedelta = timedelta(
-        minutes=settings.POST_DELAY_MINUTES
-    )
+    post_delay_minutes: float = settings.POST_DELAY_MINUTES
 
     post_lock = threading.Lock()
 
@@ -100,11 +94,13 @@ class QuestionAssigner:
 
     @staticmethod
     def schedule_post(thread: StreamThread | ThreadSummary, from_backfill: bool) -> None:
-        """Post a thread to slack once it is post_delay old."""
+        """Post a thread to slack once it is post_delay_minutes old."""
         remaining = 0.0
 
         try:
-            due_at = datetime.fromisoformat(thread.created_at) + QuestionAssigner.post_delay
+            due_at = datetime.fromisoformat(thread.created_at) + timedelta(
+                minutes=QuestionAssigner.post_delay_minutes
+            )
 
             remaining = (due_at - datetime.now(TIMEZONE)).total_seconds()
         except ValueError:
@@ -475,7 +471,11 @@ class QuestionAssigner:
 
             age = now - datetime.fromisoformat(question["assigned_at"])
 
-            if not QuestionAssigner.auto_help_after <= age <= QuestionAssigner.auto_help_max_age:
+            if not (
+                timedelta(minutes=QuestionAssigner.auto_help_after_minutes)
+                <= age
+                <= timedelta(hours=QuestionAssigner.auto_help_max_age_hours)
+            ):
                 continue
 
             thread_id = question["thread_id"]
@@ -519,7 +519,7 @@ class QuestionAssigner:
                 button_text=question["message_text"],
                 context_text=(
                     "Help automatically requested after "
-                    f"{format_duration(QuestionAssigner.auto_help_after.total_seconds())}"
+                    f"{format_duration(QuestionAssigner.auto_help_after_minutes * 60)}"
                     " without a staff answer"
                 ),
             )
