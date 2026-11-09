@@ -107,17 +107,21 @@ Note: if it is a post that should be a question, please turn the post into a que
     )
 
 
-def build_question_buttons_block(thread_id: int, dri: str, faculty_button: bool = True) -> dict:
+def build_question_buttons_blocks(thread_id: int, dri: str, help_button: bool, faculty_button: bool = True) -> list[dict]:
+    """Build the question's actions block, or nothing when there are no buttons."""
     value = f"{thread_id}:{dri}"
 
-    elements = [
-        {
-            "type": "button",
-            "text": {"type": "plain_text", "text": "Ask for extra help"},
-            "action_id": ASK_FOR_HELP_ACTION_ID,
-            "value": value,
-        }
-    ]
+    elements = []
+
+    if help_button:
+        elements.append(
+            {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Ask for extra help"},
+                "action_id": ASK_FOR_HELP_ACTION_ID,
+                "value": value,
+            }
+        )
 
     if faculty_button and settings.FACULTY_UNIQNAMES:
         elements.append(
@@ -129,7 +133,10 @@ def build_question_buttons_block(thread_id: int, dri: str, faculty_button: bool 
             }
         )
 
-    return {"type": "actions", "elements": elements}
+    if not elements:
+        return []
+
+    return [{"type": "actions", "elements": elements}]
 
 
 def remove_button(blocks: list[dict], action_id: str) -> list[dict]:
@@ -233,7 +240,7 @@ def post_channel_message(text: str) -> None:
     app.client.chat_postMessage(channel=settings.SLACK_CHANNEL_ID, text=text)
 
 
-def post_question(thread: StreamThread | ThreadSummary, dri: str | None) -> str:
+def post_question(thread: StreamThread | ThreadSummary, dri: str | None, help_button: bool) -> str:
     """Announce a thread in slack and write to the database.
 
     If there already exists an accepted answer, `dri` will be None and the message
@@ -249,7 +256,7 @@ def post_question(thread: StreamThread | ThreadSummary, dri: str | None) -> str:
     ]
 
     if dri is not None:
-        blocks.append(build_question_buttons_block(thread.id, dri))
+        blocks += build_question_buttons_blocks(thread.id, dri, help_button)
 
     posted = app.client.chat_postMessage(
         channel=settings.SLACK_CHANNEL_ID,
