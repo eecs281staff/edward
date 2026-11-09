@@ -21,7 +21,7 @@ from slack_app import (
     app,
     build_context_block,
     build_escalated_context_block,
-    build_question_buttons_block,
+    build_question_buttons_blocks,
     mention_user_by_uniqname,
     post_question,
     remove_button,
@@ -79,6 +79,11 @@ class QuestionAssigner:
         )
         QuestionAssigner.day_to_responsible_staff_uniqnames.update(Parser().parse_csv(STAFF_CSV_FILE))
         QuestionAssigner.all_staff_uniqnames.update(staff for sublist in QuestionAssigner.day_to_responsible_staff_uniqnames.values() for staff in sublist)
+
+    @staticmethod
+    def can_request_extra_help() -> bool:
+        """Whether there is anyone besides the assignee to pull in as extra help."""
+        return len(QuestionAssigner.all_staff_uniqnames) > 1
 
     @staticmethod
     def take_next_dri() -> str:
@@ -150,19 +155,19 @@ class QuestionAssigner:
 
                 LOG.warning(f"could not load thread {thread.id}, posting it as is: {error}")
 
-                post_question(thread, QuestionAssigner.take_next_dri())
+                post_question(thread, QuestionAssigner.take_next_dri(), QuestionAssigner.can_request_extra_help())
 
                 return
 
             current = detail.unwrap().thread
 
             if current.accepted_id is None:
-                post_question(current, QuestionAssigner.take_next_dri())
+                post_question(current, QuestionAssigner.take_next_dri(), QuestionAssigner.can_request_extra_help())
             elif from_backfill:
                 LOG.info(f"skipping missed thread {thread.number}, it was already answered")
                 return
             else:
-                message_ts = post_question(current, None)
+                message_ts = post_question(current, None, QuestionAssigner.can_request_extra_help())
 
                 store.set_accepted_id(current.id, current.accepted_id)
 
@@ -499,7 +504,9 @@ class QuestionAssigner:
                     "type": "section",
                     "text": {"type": "mrkdwn", "text": question["message_text"]},
                 },
-                build_question_buttons_block(thread_id, question["dri"], faculty_button=not escalated),
+                *build_question_buttons_blocks(
+                    thread_id, question["dri"], QuestionAssigner.can_request_extra_help(), faculty_button=not escalated
+                ),
             ]
 
             if escalated:
@@ -635,8 +642,11 @@ class QuestionAssigner:
                         "type": "section",
                         "text": {"type": "mrkdwn", "text": reply},
                     },
-                    build_question_buttons_block(
-                        thread_id, dri, faculty_button=question["escalated_at"] is None
+                    *build_question_buttons_blocks(
+                        thread_id,
+                        dri,
+                        QuestionAssigner.can_request_extra_help(),
+                        faculty_button=question["escalated_at"] is None,
                     ),
                 ],
             )
