@@ -668,6 +668,12 @@ class QuestionAssigner:
 
         add_reaction(question["channel_id"], question["message_ts"], "memo")
 
+        app.client.chat_postMessage(
+            channel=question["channel_id"],
+            thread_ts=question["message_ts"],
+            text="This question was turned into a post.",
+        )
+
         app.client.chat_update(
             channel=question["channel_id"],
             ts=question["message_ts"],
@@ -699,6 +705,12 @@ class QuestionAssigner:
         store.set_status(thread_id, store.DELETED)
 
         add_reaction(question["channel_id"], question["message_ts"], "wastebasket")
+
+        app.client.chat_postMessage(
+            channel=question["channel_id"],
+            thread_ts=question["message_ts"],
+            text="This thread was deleted.",
+        )
 
         app.client.chat_update(
             channel=question["channel_id"],
