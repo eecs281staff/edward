@@ -11,27 +11,18 @@ from env import settings
 if settings.DISCORD_WEBHOOK_URL is None:
     LOG.info("DISCORD_WEBHOOK_URL not set, not forwarding announcements to Discord")
 
-# discord's limits on embed fields
-MAX_TITLE_LENGTH = 256
-MAX_DESCRIPTION_LENGTH = 4096
-
 REQUEST_TIMEOUT_SECONDS = 10
 
 # discord rejects urllib's default user agent
 USER_AGENT = "Edward"
 
 
-def truncate(text: str, limit: int) -> str:
-    return text if len(text) <= limit else text[: limit - 1] + "…"
-
-
 def build_announcement_payload(thread: StreamThread | Thread) -> dict:
     return {
         "embeds": [
             {
-                "title": truncate(thread.title, MAX_TITLE_LENGTH),
+                "title": "New Ed Announcement",
                 "url": f"https://edstem.org/us/courses/{settings.COURSE_ID}/discussion/{thread.id}",
-                "description": truncate(thread.document, MAX_DESCRIPTION_LENGTH),
                 "footer": {"text": thread.category},
                 "timestamp": thread.created_at,
             }
