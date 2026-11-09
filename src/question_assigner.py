@@ -186,21 +186,17 @@ class QuestionAssigner:
         button_blocks: list[dict],
         button_text: str,
         context_text: str,
-        requester: str | None = None,
     ) -> None:
         """Pull in extra staff for a question.
 
         ``parent_ts`` is the original question message (where the reply goes);
         ``button_ts`` is whichever message the button was actually on, which is a
         threaded reply when help is requested after an answer was un-accepted.
-
-        ``requester`` is the uniqname of whoever pressed the button, which is not
-        the assignee when a non-assignee confirmed the request.
         """
         current_day = get_current_day()
 
-        # neither the assignee nor whoever asked can be their own extra help
-        excluded = {dri} if requester is None else {dri, requester}
+        # the assignee can't be their own extra help
+        excluded = {dri}
 
         helpers = [staff for staff in QuestionAssigner.day_to_responsible_staff_uniqnames.get(current_day, []) if staff not in excluded]
 

@@ -21,7 +21,6 @@ from slack_app import (
     build_faculty_confirm_modal,
     build_help_confirm_modal,
     check_faculty_user_ids,
-    get_uniqname_by_user_id,
     get_user_id_by_uniqname,
     load_user_ids,
 )
@@ -98,7 +97,6 @@ def handle_ask_for_help(ack, body) -> None:
         button_blocks=body["message"]["blocks"],
         button_text=body["message"].get("text", ""),
         context_text=f"Help requested by <@{user_id}>",
-        requester=dri,
     )
 
 
@@ -131,7 +129,6 @@ def handle_ask_for_help_confirm(ack, body, view) -> None:
         button_blocks=request["button_blocks"],
         button_text=request["button_text"],
         context_text=f"Help requested by <@{user_id}>",
-        requester=get_uniqname_by_user_id(user_id),
     )
 
 
