@@ -30,7 +30,7 @@ notifications when they're sleeping or don't want notifications.
 | Option | Default | Description |
 | --- | --- | --- |
 | `EDSTEM_API_KEY` | required | Edstem API token, obtained from <https://edstem.org/us/settings/api-tokens> |
-| `EDSTEM_EMAIL` | required | Email for the bot's Edstem account, used to get the stream's session token |
+| `EDSTEM_EMAIL` | required | Email for the bot's Edstem account, used to get the stream's session token. You just need some account credentials that can access the course's Edstem channel to listen to Edstem events. You can do this via creating a Group account in MCommunity and using that email to make an Edstem account.  |
 | `EDSTEM_PASSWORD` | required | Password for the bot's Edstem account |
 | `COURSE_ID` | required | Edstem course ID |
 | `SLACK_APP_TOKEN` | required | Slack app token, see [Slack Setup](#slack-setup) |
